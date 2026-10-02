@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.1.2 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.1.3 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -271,10 +271,57 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         MethodClass.OTHER_NOT_CALLED -> "other"
     }
 
+    // ------------------------------------------------------------------ On-screen summary
+
+    /** A few screens of text meant to be photographed in the car: the findings that decide what v0.2 does. */
+    fun summary(): String = buildString {
+        val st = vm.ecarx.status
+        val pk = vm.packages
+        val sv = vm.services
+        appendLine("7X SR PROBE 0.1.3 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
+        val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
+        appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; reported ${android["Model"]}")
+        appendLine("Real build: ${props["ro.build.display.id"]}")
+        appendLine("Board: ${props["ro.board.platform"]}  hw: ${props["ro.hardware"]}")
+        appendLine("ECARX: car ${st.car}, function ${st.function}, sensor ${st.sensor}, carInfo ${st.carInfo}")
+        appendLine("Impl: ${st.detail.substringAfter("car=").substringBefore(";")}")
+        appendLine("Signals AVAILABLE ${vm.signals.count { it.availability == Availability.AVAILABLE }}/${vm.signals.size}; UNAVAILABLE(placeholder) ${vm.signals.count { it.availability == Availability.UNAVAILABLE }}")
+        appendLine("Packages visible ${pk?.totalVisible}; relevant ${pk?.relevant?.size}; services ${sv?.totalServices}; relevant ${sv?.relevant?.size}")
+        appendLine("Classes reflected ${vm.apis.size}; ADAS-named constants ${vm.namedConstants.size}; errors ${vm.errors.size}")
+        vm.errors.take(5).forEach { appendLine("  ! ${it.take(160)}") }
+        appendLine()
+        appendLine("SIGNALS (non-placeholder values only):")
+        vm.signals.filter { it.availability == Availability.AVAILABLE }.forEach { appendLine("  ${it.label}: ${it.decodedValue ?: it.rawValue}") }
+        appendLine("Placeholder / not present: " + vm.signals.filter { it.availability != Availability.AVAILABLE }.joinToString { "${it.label}[${it.availability.name.take(4)}]" })
+        appendLine()
+        appendLine("(page 2) RELEVANT PACKAGES (${pk?.relevant?.size}):")
+        pk?.relevant?.forEach { appendLine("  ${it.packageName} v${it.versionName} ${if (it.system) "sys" else "usr"} act${it.activities.size}/svc${it.services.size}/rcv${it.receivers.size}") }
+        appendLine()
+        appendLine("RELEVANT SERVICES (${sv?.relevant?.size}):")
+        sv?.relevant?.forEach { appendLine("  ${it.name}${it.descriptor?.let { d -> " -> $d" } ?: ""}") }
+        appendLine()
+        appendLine("(page 3) PERCEPTION / SR LEADS (names only, nothing invoked):")
+        val vendorApis = vm.apis.filter { Terms.isVendor(it.className) }
+        appendLine("Vendor classes: ${vendorApis.size}. Managers/interfaces: " + vendorApis.filter { it.kind == "interface" }.joinToString { it.className.substringAfterLast('.') }.take(900))
+        val strong = vm.apis.flatMap { a -> a.methods.filter { m -> Terms.match(m.name, Terms.STRONG).isNotEmpty() }.map { m -> a.className.substringAfterLast('.') + "." + m.name } }
+        appendLine("Methods named like perception: ${strong.size}")
+        strong.take(40).forEach { appendLine("  $it") }
+        appendLine("ADAS-named constants:")
+        vm.namedConstants.take(60).forEach { appendLine("  ${it.name}=0x${Integer.toHexString(it.value)}") }
+        val scans = vm.dexScans
+        appendLine("Name scans: ${scans.size} sources; relevant class names ${scans.sumOf { it.matchingClasses.size }}")
+        scans.filter { it.matchingClasses.isNotEmpty() || it.nativeLibs.any { l -> Terms.match(l, Terms.RENDER).isNotEmpty() } }.take(25).forEach { d ->
+            appendLine("  ${d.source.substringAfterLast('/')}: ${d.matchingClasses.size} cls; libs ${d.nativeLibs.filter { l -> Terms.match(l, Terms.RENDER).isNotEmpty() }.joinToString().take(80)}")
+        }
+        appendLine("Top relevant class names:")
+        scans.flatMap { it.matchingClasses }.filter { Terms.match(it, Terms.STRONG).isNotEmpty() }.distinct().take(50).forEach { appendLine("  $it") }
+    }
+
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.1.2")
+        put("app", "7X SR Probe 0.1.3")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {

@@ -7,7 +7,10 @@ import au.local.zeekr.srprobe.safety.ReadOnlyGuard
 import com.ecarx.xui.adaptapi.car.Calls
 
 class FakeContext : android.content.ContextWrapper(null) {
+    private val dir = java.nio.file.Files.createTempDirectory("srprobe-test").toFile()
     override fun getApplicationContext(): android.content.Context = this
+    override fun getFilesDir(): java.io.File = dir
+    override fun getPackageName(): String = "au.local.zeekr.srprobe"
 }
 
 fun check(cond: Boolean, msg: String) { if (!cond) { System.err.println("FAIL: $msg"); kotlin.system.exitProcess(1) }; println("ok   $msg") }
@@ -50,5 +53,19 @@ fun main(args: Array<String>) {
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")
     }
+    // Whole pipeline: discovery steps (most fail harmlessly without a real PackageManager) then every export format.
+    val vm = au.local.zeekr.srprobe.ui.DiagnosticsViewModel(FakeContext())
+    vm.runSafeDiscovery()
+    var waited = 0
+    while (vm.discoveryMs == 0L && waited++ < 200) Thread.sleep(100)
+    check(vm.discoveryMs > 0, "discovery pipeline finished (errors: ${vm.errors.size})")
+    vm.errors.forEach { println("  discovery note: " + it.take(140)) }
+    val ex = au.local.zeekr.srprobe.logging.ReportExporter(FakeContext(), vm)
+    val md = ex.markdown(); val sum = ex.summary(); val js = ex.discoveryJson().toString()
+    check(md.contains("## Known vehicle signals") && md.contains("Read-only invocation ledger"), "markdown report builds (${md.length} chars)")
+    check(sum.contains("SIGNALS") && sum.contains("ECARX: car AVAILABLE"), "summary builds (${sum.lines().size} lines)")
+    check(js.contains("signals"), "discovery json builds")
+    check(Calls.log.none { it.startsWith("MUTATOR") || it.startsWith("UNVERIFIED") }, "still no mutator after full pipeline")
+    println(sum.lines().take(14).joinToString("\n"))
     println("SMOKE TEST PASSED")
 }

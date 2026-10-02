@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.1.2", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.1.3", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -70,6 +70,7 @@ class MainActivity : Activity() {
         right.addView(button("Export Report") { export() })
         right.addView(button("Save Report To Folder / USB…") { pickFolder() })
         right.addView(button("Share Report…") { share() })
+        right.addView(button("Show Summary (to photograph)") { showSummary() })
         right.addView(button("Copy Report To Clipboard (in parts)") { copyNextPart() })
         right.addView(text("Optional (off by default, see READ_ONLY_AUDIT.md)", 16f, DIM).apply { setPadding(0, dp(16), 0, dp(4)) })
         binderToggle = button("") {
@@ -152,6 +153,22 @@ class MainActivity : Activity() {
             } catch (t: Throwable) {
                 vm.recorder.log("Export failed: $t")
                 runOnUiThread { toast("Export failed: ${t.message}") }
+            }
+        }
+    }
+
+    /** Full-screen, scrollable plain text of the findings that matter, sized to be readable in a photo. */
+    private fun showSummary() {
+        vm.runOnWorker {
+            val text = try { exporter.summary() } catch (t: Throwable) { "Summary failed: $t" }
+            runOnUiThread {
+                val tv = TextView(this).apply {
+                    this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+                    setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
+                }
+                val scroll = ScrollView(this).apply { addView(tv) }
+                AlertDialog.Builder(this, android.R.style.Theme_Material_NoActionBar_Fullscreen)
+                    .setView(scroll).setPositiveButton("Close", null).show()
             }
         }
     }
