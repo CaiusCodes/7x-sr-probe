@@ -1,0 +1,8 @@
+build/
+build-offline/
+.gradle/
+local.properties
+*.keystore
+*.jks
+*.iml
+.idea/

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Package name, version and SDK levels come from app/build.gradle.kts (scripts/build-offline.sh injects them). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The ONLY permission requested. It lets PackageManager list installed packages on Android 11+.
+      It grants visibility, not control. Deliberately absent: INTERNET (no upload), CAMERA (no Camera2
+      in v0.1), location, microphone, contacts, any car.* or system/signature permission.
+    -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:allowBackup="false"
+        android:largeHeap="true"
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:name=".ui.ProbeApplication">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Serves exported report files to the share sheet only. Not exported; read-only; per-URI grants. -->
+        <provider
+            android:name=".logging.ReportProvider"
+            android:authorities="au.local.zeekr.srprobe.reports"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>
