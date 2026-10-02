@@ -160,7 +160,13 @@ data class DexScanRecord(
     val matchingAssets: List<String>,
     val note: String?,
     /** Every class in a vehicle-vendor namespace (capped), used to seed reflection of the ECARX jar. */
-    val vendorClassNames: List<String> = emptyList()
+    val vendorClassNames: List<String> = emptyList(),
+    /** v0.2: class names scored by Terms.perceptionScore, highest first, as "score name". */
+    val perceptionClasses: List<String> = emptyList(),
+    /** v0.2: vendor AIDL interface names, intent actions and content authorities found as dex strings. */
+    val endpointStrings: List<String> = emptyList(),
+    /** v0.2: vendor-namespace strings from the APK's binary AndroidManifest.xml (permissions, actions, components). */
+    val manifestStrings: List<String> = emptyList()
 )
 
 // ---------------------------------------------------------------------------------------------

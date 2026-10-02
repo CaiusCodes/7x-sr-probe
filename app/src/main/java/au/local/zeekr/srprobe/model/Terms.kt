@@ -28,6 +28,32 @@ object Terms {
         "radar", "lidar", "fusion", "vision", "target", "envmodel", "worldmodel"
     )
 
+    /**
+     * v0.2 surrounding-traffic scoring, token based so "JsonObject" scores only the weak "object".
+     * Strong tokens point at perception output; weak ones need a second hit before a name is listed.
+     */
+    private val PERCEPTION_STRONG = setOf(
+        "perception", "obstacle", "obstacles", "fusion", "ego", "freespace", "cipv", "vru", "envmodel", "worldmodel",
+        "surrounding", "pedestrian", "pedestrians", "cyclist", "cyclists", "laneline", "lanelines", "roadmodel",
+        "radar", "lidar", "sr", "objlist", "objectlist", "hdmap"
+    )
+    private val PERCEPTION_WEAK = setOf(
+        "obj", "objs", "object", "objects", "target", "targets", "track", "tracks", "tracking", "lane", "lanes",
+        "traffic", "vehicle", "vehicles", "adas", "pilot", "scene", "surround", "cluster", "hud", "dashboard",
+        "nzp", "noa", "acc"
+    )
+
+    /** 0 = unrelated. Strong token = 2, weak token = 1; a name is listed at 2 or more. */
+    fun perceptionScore(name: String): Int {
+        if (isCommonLib(name)) return 0
+        val toks = tokens(name.substringAfterLast('.'))
+        val strong = toks.count { it in PERCEPTION_STRONG }
+        val weak = toks.count { it in PERCEPTION_WEAK }
+        if (strong > 0) return strong * 2 + weak
+        // Weak-only names: two hits in vendor code (e.g. "AdasTarget"), three anywhere else.
+        return if (weak >= 3 || (weak >= 2 && isVendor(name))) weak else 0
+    }
+
     /** Native-library / asset hints for a 3D cluster or SR renderer. */
     val RENDER = listOf(
         "unity", "unreal", "ue4", "ue5", "kanzi", "godot", "cocos", "filament", "osg", "sr", "scene", "hmi3d",

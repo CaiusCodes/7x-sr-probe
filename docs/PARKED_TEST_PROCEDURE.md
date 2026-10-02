@@ -20,7 +20,7 @@ Do not change any setting while doing this.
 
 ## 1. Install and launch
 
-1. Install `7x-sr-probe-v0.1.3-debug.apk` with your usual App Lab method. Confirm the only permission listed is "query all packages" (or none).
+1. Install `7x-sr-probe-v0.2-debug.apk` with your usual App Lab method. Confirm the only permission listed is "query all packages" (or none).
 2. Launch **7X SR Probe**.
 3. Confirm the green **SAFETY MODE  READ ONLY ✓** banner is visible. If not, stop.
 
@@ -55,6 +55,7 @@ Do not change any setting while doing this.
 
 12. Press **Export Report**. It writes to the app's storage and copies to `Download/SRProbe/` if the system allows.
 13. If you cannot reach Downloads from the car, use **Save Report To Folder / USB…** (pick a USB drive in the system picker) or **Share Report…**.
+13. (v0.2) Before Run Safe Discovery, tap **Binder interface names** so it reads ON; discovery now scans every system app and can take up to about 10 minutes.
 13a. Easiest if export fails: press **Show Summary (to photograph)**, photograph each page as you scroll, and send me the photos.
 13b. If you prefer text, press **Copy Report To Clipboard (in parts)**, paste part 1 where you can send it, then press again for each next part.
 14. You should have three files: `srprobe-report.md`, `srprobe-discovery.json`, `srprobe-events.jsonl` (plus a zip with all three).

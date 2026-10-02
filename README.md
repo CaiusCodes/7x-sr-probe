@@ -15,7 +15,7 @@ Read-only diagnostic app for an Australian-market Zeekr 7X. It answers one quest
 
 ## Download
 
-Get `7x-sr-probe-v0.1.3-debug.apk` from the [Releases](../../releases) page. SHA-256: `60910dfae86c631fea7f5499eb44a5ed7f38a296e7e8b80f301a13116aaa5353`.
+Get `7x-sr-probe-v0.2-debug.apk` from the [Releases](../../releases) page. SHA-256: `03b8f4d94d900c970b80a81900821a824bc8f300f423ea0dffeaa0fcea3a9267`.
 
 ## Credits
 
@@ -23,6 +23,7 @@ Vehicle API names and signal ids come from public research by the [dts88/zeekr-s
 
 ## Changelog
 
+- **0.2** Deeper names-only search for surrounding-car data. App Lab hides most packages, so discovery now lists the system app folders directly and reads class names, vendor interface names, intent actions and manifest strings from every APK there (or its `.vdex` when the APK is stripped). It also lists config file names in `etc` folders. The summary leads with ranked perception-like names. No new vehicle calls; see READ_ONLY_AUDIT.md section B.
 - **0.1.3** Adds **Show Summary (to photograph)**: a few full-screen pages of the key findings, for cars where no export route works. Display only; nothing is written or sent.
 - **0.1.2** Adds **Copy Report To Clipboard (in parts)** for cars where USB/file export doesn't work. It only copies text to the clipboard; the app still has no network permission.
 - **0.1.1** Fixes the "Reflect vendor classes" step crashing on the car (`BootstrapMethodError`). The build had left an invokedynamic call site in a Kotlin stdlib helper that Android cannot link. The helper is gone and `scripts/build-offline.sh` now fails if one reappears. Same signing key, so it installs over 0.1.

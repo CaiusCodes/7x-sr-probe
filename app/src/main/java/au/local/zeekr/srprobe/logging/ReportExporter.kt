@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.1.3 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.2 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -210,14 +210,21 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             appendLine()
         }
         appendLine("### Class names and strings found in scanned jars/APKs")
-        vm.dexScans.forEach { d ->
+        val quiet = vm.dexScans.filter { d -> d.matchingClasses.isEmpty() && d.perceptionClasses.isEmpty() && d.endpointStrings.isEmpty() && d.manifestStrings.isEmpty() }
+        appendLine("${quiet.size} scanned sources had no relevant names: ${quiet.joinToString { it.source }}")
+        appendLine()
+        (vm.dexScans - quiet.toSet()).forEach { d ->
             appendLine("#### ${d.source}: `${d.path}`")
+            d.perceptionClasses.take(60).forEach { appendLine("- perception-like (score name) `$it`") }
+            d.endpointStrings.take(60).forEach { appendLine("- endpoint string `$it`") }
+            d.manifestStrings.take(40).forEach { appendLine("- manifest `$it`") }
             appendLine("dex files ${d.dexFiles}, classes ${d.totalClasses}, relevant classes ${d.matchingClasses.size}, strings ${d.matchingStrings.size}${d.note?.let { "; $it" } ?: ""}")
             if (d.nativeLibs.isNotEmpty()) appendLine("- native libs: ${d.nativeLibs.joinToString()}")
             if (d.matchingAssets.isNotEmpty()) appendLine("- assets: ${d.matchingAssets.joinToString()}")
-            d.matchingClasses.take(300).forEach { appendLine("- class `$it`") }
-            if (d.matchingClasses.size > 300) appendLine("- … ${d.matchingClasses.size - 300} more in srprobe-discovery.json")
-            d.matchingStrings.take(150).forEach { appendLine("- string `$it`") }
+            val cap = if (d.vendorClassNames.isEmpty()) 40 else 300
+            d.matchingClasses.take(cap).forEach { appendLine("- class `$it`") }
+            if (d.matchingClasses.size > cap) appendLine("- … ${d.matchingClasses.size - cap} more in srprobe-discovery.json")
+            d.matchingStrings.take(if (d.vendorClassNames.isEmpty()) 30 else 150).forEach { appendLine("- string `$it`") }
             appendLine()
         }
 
@@ -278,50 +285,81 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.1.3 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.2 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
-        appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; reported ${android["Model"]}")
-        appendLine("Real build: ${props["ro.build.display.id"]}")
-        appendLine("Board: ${props["ro.board.platform"]}  hw: ${props["ro.hardware"]}")
-        appendLine("ECARX: car ${st.car}, function ${st.function}, sensor ${st.sensor}, carInfo ${st.carInfo}")
-        appendLine("Impl: ${st.detail.substringAfter("car=").substringBefore(";")}")
-        appendLine("Signals AVAILABLE ${vm.signals.count { it.availability == Availability.AVAILABLE }}/${vm.signals.size}; UNAVAILABLE(placeholder) ${vm.signals.count { it.availability == Availability.UNAVAILABLE }}")
-        appendLine("Packages visible ${pk?.totalVisible}; relevant ${pk?.relevant?.size}; services ${sv?.totalServices}; relevant ${sv?.relevant?.size}")
-        appendLine("Classes reflected ${vm.apis.size}; ADAS-named constants ${vm.namedConstants.size}; errors ${vm.errors.size}")
+        appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
+        appendLine("ECARX: car ${st.car}; signals AVAILABLE ${vm.signals.count { it.availability == Availability.AVAILABLE }}/${vm.signals.size}; discovery ${vm.discoveryMs / 1000} s; errors ${vm.errors.size}")
         vm.errors.take(5).forEach { appendLine("  ! ${it.take(160)}") }
-        appendLine()
-        appendLine("SIGNALS (non-placeholder values only):")
-        vm.signals.filter { it.availability == Availability.AVAILABLE }.forEach { appendLine("  ${it.label}: ${it.decodedValue ?: it.rawValue}") }
-        appendLine("Placeholder / not present: " + vm.signals.filter { it.availability != Availability.AVAILABLE }.joinToString { "${it.label}[${it.availability.name.take(4)}]" })
-        appendLine()
-        appendLine("(page 2) RELEVANT PACKAGES (${pk?.relevant?.size}):")
-        pk?.relevant?.forEach { appendLine("  ${it.packageName} v${it.versionName} ${if (it.system) "sys" else "usr"} act${it.activities.size}/svc${it.services.size}/rcv${it.receivers.size}") }
-        appendLine()
-        appendLine("RELEVANT SERVICES (${sv?.relevant?.size}):")
-        sv?.relevant?.forEach { appendLine("  ${it.name}${it.descriptor?.let { d -> " -> $d" } ?: ""}") }
-        appendLine()
-        appendLine("(page 3) PERCEPTION / SR LEADS (names only, nothing invoked):")
-        val vendorApis = vm.apis.filter { Terms.isVendor(it.className) }
-        appendLine("Vendor classes: ${vendorApis.size}. Managers/interfaces: " + vendorApis.filter { it.kind == "interface" }.joinToString { it.className.substringAfterLast('.') }.take(900))
-        val strong = vm.apis.flatMap { a -> a.methods.filter { m -> Terms.match(m.name, Terms.STRONG).isNotEmpty() }.map { m -> a.className.substringAfterLast('.') + "." + m.name } }
-        appendLine("Methods named like perception: ${strong.size}")
-        strong.take(40).forEach { appendLine("  $it") }
-        appendLine("ADAS-named constants:")
-        vm.namedConstants.take(60).forEach { appendLine("  ${it.name}=0x${Integer.toHexString(it.value)}") }
+        appendLine("Packages visible ${pk?.totalVisible}: ${pk?.allPackageNames?.joinToString()?.take(400)}")
+        appendLine("App folder scan: ${vm.appScanNote ?: "not run"}")
         val scans = vm.dexScans
-        appendLine("Name scans: ${scans.size} sources; relevant class names ${scans.sumOf { it.matchingClasses.size }}")
-        scans.filter { it.matchingClasses.isNotEmpty() || it.nativeLibs.any { l -> Terms.match(l, Terms.RENDER).isNotEmpty() } }.take(25).forEach { d ->
-            appendLine("  ${d.source.substringAfterLast('/')}: ${d.matchingClasses.size} cls; libs ${d.nativeLibs.filter { l -> Terms.match(l, Terms.RENDER).isNotEmpty() }.joinToString().take(80)}")
+        appendLine("Sources scanned ${scans.size}; with dex ${scans.count { it.dexFiles > 0 }}; unreadable ${scans.count { it.note?.contains("not readable") == true }}")
+        appendLine()
+
+        appendLine("SURROUNDING-CAR LEADS: CLASS NAMES (score, name, where; names only, nothing invoked)")
+        val best = HashMap<String, Pair<Int, String>>()
+        scans.forEach { d ->
+            d.perceptionClasses.forEach { e ->
+                val score = e.substringBefore(' ').toIntOrNull() ?: 0
+                val name = e.substringAfter(' ')
+                if ((best[name]?.first ?: -1) < score) best[name] = score to d.source.substringAfterLast('/')
+            }
         }
-        appendLine("Top relevant class names:")
-        scans.flatMap { it.matchingClasses }.filter { Terms.match(it, Terms.STRONG).isNotEmpty() }.distinct().take(50).forEach { appendLine("  $it") }
+        best.entries.sortedWith(Comparator { x, y -> if (y.value.first != x.value.first) y.value.first - x.value.first else x.key.compareTo(y.key) })
+            .take(80).forEach { appendLine("  ${it.value.first} ${it.key}  [${it.value.second}]") }
+        if (best.isEmpty()) appendLine("  (none)")
+        appendLine()
+
+        appendLine("APPS WITH THE MOST PERCEPTION-LIKE NAMES:")
+        scans.filter { it.perceptionClasses.isNotEmpty() }
+            .map { d -> Triple(d.source.substringAfterLast('/'), d.perceptionClasses.size, d.perceptionClasses.sumOf { it.substringBefore(' ').toIntOrNull() ?: 0 }) }
+            .sortedByDescending { it.third }.take(25)
+            .forEach { appendLine("  ${it.first}: ${it.second} names, score ${it.third}") }
+        appendLine()
+
+        appendLine("(page 2) VENDOR INTERFACES / ACTIONS / PROVIDERS FOUND AS STRINGS:")
+        val endpoints = LinkedHashMap<String, String>()
+        scans.forEach { d -> d.endpointStrings.forEach { e -> endpoints.getOrPut(e) { d.source.substringAfterLast('/') } } }
+        val ranked = endpoints.entries.sortedWith(Comparator { x, y ->
+            val sx = Terms.perceptionScore(x.key) + Terms.match(x.key, Terms.STRONG).size
+            val sy = Terms.perceptionScore(y.key) + Terms.match(y.key, Terms.STRONG).size
+            if (sy != sx) sy - sx else x.key.compareTo(y.key)
+        })
+        appendLine("  ${endpoints.size} distinct; top 90:")
+        ranked.take(90).forEach { appendLine("  ${it.key}  [${it.value}]") }
+        appendLine()
+
+        appendLine("BINDER SERVICES (${sv?.relevant?.size} relevant of ${sv?.totalServices}) ${sv?.note ?: ""}")
+        sv?.relevant?.forEach { appendLine("  ${it.name}${it.descriptor?.let { d -> " -> $d" } ?: ""}${it.note?.let { n -> " ($n)" } ?: ""}") }
+        appendLine("All service names: ${sv?.allNames?.joinToString()?.take(4000)}")
+        appendLine()
+
+        appendLine("(page 3) CONFIG FILE NAMES (contents not read): ${vm.configNames.size}")
+        vm.configNames.take(60).forEach { appendLine("  $it") }
+        appendLine()
+
+        appendLine("ZEEKR SDK IN FRAMEWORK JARS (package: classes):")
+        scans.filter { it.vendorClassNames.isNotEmpty() }.forEach { d ->
+            val pkgs = d.vendorClassNames.groupingBy { it.substringBeforeLast('.') }.eachCount()
+            appendLine("  ${d.path}: ${d.totalClasses} classes, ${pkgs.size} vendor packages")
+            pkgs.entries.filter { it.key.startsWith("com.zeekr") }.sortedBy { it.key }.take(60).forEach { appendLine("    ${it.key}: ${it.value}") }
+        }
+        appendLine("Key SDK classes (methods listed, not called):")
+        vm.apis.filter { a -> listOf("Dashboard", "ACCStatus", "Adas", "ADAS", "Pilot", "Perception", "Obstacle", "Scene").any { a.className.substringAfterLast('.').contains(it) } && a.className.startsWith("com.zeekr") }
+            .take(12).forEach { a ->
+                appendLine("  ${a.className} (${a.kind})")
+                a.methods.take(15).forEach { m -> appendLine("    ${m.returnType.substringAfterLast('.')} ${m.name}(${m.parameterTypes.joinToString { it.substringAfterLast('.') }})") }
+            }
+        appendLine()
+        appendLine("Signals: " + vm.signals.filter { it.availability == Availability.AVAILABLE }.joinToString { "${it.label}=${it.decodedValue ?: it.rawValue}" })
+        appendLine("END OF SUMMARY")
     }
 
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.1.3")
+        put("app", "7X SR Probe 0.2")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {
@@ -364,7 +402,8 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             vm.dexScans.forEach { d ->
                 put(JSONObject().put("source", d.source).put("path", d.path).put("dexFiles", d.dexFiles).put("classes", d.totalClasses)
                     .put("matchingClasses", JSONArray(d.matchingClasses)).put("matchingStrings", JSONArray(d.matchingStrings))
-                    .put("nativeLibs", JSONArray(d.nativeLibs)).put("vendorClassNames", JSONArray(d.vendorClassNames)).put("assets", JSONArray(d.matchingAssets)).put("note", d.note ?: JSONObject.NULL))
+                    .put("nativeLibs", JSONArray(d.nativeLibs)).put("vendorClassNames", JSONArray(d.vendorClassNames)).put("assets", JSONArray(d.matchingAssets))
+                    .put("perceptionClasses", JSONArray(d.perceptionClasses)).put("endpoints", JSONArray(d.endpointStrings)).put("manifest", JSONArray(d.manifestStrings)).put("note", d.note ?: JSONObject.NULL))
             }
         })
         put("unknownCallbacks", JSONObject((vm.capture?.unknownCallbacks ?: emptyMap<String, Long>()) as Map<*, *>))

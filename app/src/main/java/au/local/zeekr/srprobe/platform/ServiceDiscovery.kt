@@ -20,7 +20,7 @@ object ServiceDiscovery {
 
     data class Result(val totalServices: Int, val relevant: List<ServiceRecord>, val allNames: List<String>, val note: String?)
 
-    private val SERVICE_TERMS = Terms.PACKAGE + Terms.CLASS + listOf("ecarx", "zeekr", "carsecurity", "vehicledc")
+    private val SERVICE_TERMS = Terms.PACKAGE + Terms.CLASS + listOf("ecarx", "zeekr", "carsecurity", "vehicledc", "vdc", "hmi", "ihu", "someip", "dds", "fusion", "ipc", "vendor.")
 
     fun run(queryDescriptors: Boolean): Result {
         val sm = runCatching { Class.forName("android.os.ServiceManager") }.getOrNull()

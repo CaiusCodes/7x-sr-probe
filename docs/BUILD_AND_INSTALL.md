@@ -2,9 +2,9 @@
 
 ## Option 1: use the prebuilt debug APK
 
-`dist/7x-sr-probe-v0.1.3-debug.apk`
-SHA-256 `60910dfae86c631fea7f5499eb44a5ed7f38a296e7e8b80f301a13116aaa5353`
-Package `au.local.zeekr.srprobe`, version 0.1.3 (4), minSdk 26, targetSdk 34, signed with a throwaway Android debug key.
+`dist/7x-sr-probe-v0.2-debug.apk`
+SHA-256 `03b8f4d94d900c970b80a81900821a824bc8f300f423ea0dffeaa0fcea3a9267`
+Package `au.local.zeekr.srprobe`, version 0.2 (5), minSdk 26, targetSdk 34, signed with a throwaway Android debug key.
 
 How it was built: Google's SDK and Maven hosts were blocked in the build environment, so it was built with `scripts/build-offline.sh` (Ubuntu's android-sdk-build-tools 29 for aapt2/dx/zipalign/apksigner, kotlinc 2.0.21, and the Android 12 framework jar from Maven Central for compiling). `tools/jvm-smoke` passed against that build. **It has not been run on an Android device or emulator**, so the first launch on the car is its first real run. The Gradle project below was not built here for the same network reason.
 
@@ -35,7 +35,7 @@ Use the same App Lab / sideload method you already use. This app needs nothing s
 - **No runtime permission prompts** appear. If one does, deny it and note it.
 - It does not need network, camera, location or storage permission. Export uses the system file picker or MediaStore.
 
-If you have ADB access (unlikely on a production head unit), `adb install dist/7x-sr-probe-v0.1.3-debug.apk` also works. Do not enable developer options or ADB on the car just for this.
+If you have ADB access (unlikely on a production head unit), `adb install dist/7x-sr-probe-v0.2-debug.apk` also works. Do not enable developer options or ADB on the car just for this.
 
 ## Uninstall
 

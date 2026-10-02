@@ -19,6 +19,7 @@ import au.local.zeekr.srprobe.platform.AndroidEnvironment
 import au.local.zeekr.srprobe.platform.DexScanner
 import au.local.zeekr.srprobe.platform.PackageDiscovery
 import au.local.zeekr.srprobe.platform.ServiceDiscovery
+import au.local.zeekr.srprobe.platform.SystemFiles
 import au.local.zeekr.srprobe.safety.ReadOnlyGuard
 import java.util.concurrent.Executors
 
@@ -48,6 +49,9 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var discoveryRunAt: String? = null; private set
     @Volatile var discoveryMs: Long = 0; private set
     @Volatile var parkedAtDiscovery: Boolean? = null; private set
+    @Volatile var appFolders: Int = 0; private set
+    @Volatile var appScanNote: String? = null; private set
+    @Volatile var configNames: List<String> = emptyList(); private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
     /** Opt-in: query AIDL interface names of relevant binder services. Off by default. */
@@ -106,18 +110,48 @@ class DiagnosticsViewModel(private val app: Context) {
             apis = EcarxReflection(javaClass.classLoader!!).inspectAll(seeds, runtime)
             namedConstants = SensorDiscovery.catalogue(apis)
         }
+        val out = ArrayList(bootScans)
         step("Scan relevant system APKs (names only)") {
             val pkgs = packages?.relevant.orEmpty().filter { it.system && it.sourceDir != null }
                 .sortedByDescending { p -> p.matchedTerms.count { it in Terms.STRONG } }
                 .take(MAX_APKS)
-            val out = ArrayList(bootScans)
             for (p in pkgs) {
                 busy = "Scanning ${p.packageName}"
                 changed()
-                out += DexScanner.scan(p.packageName, p.sourceDir!!)
+                out += DexScanner.scan(p.packageName, p.sourceDir!!, light = true)
                 dexScans = out.toList()
             }
         }
+        step("Scan system app folders (names only)") {
+            val folders = SystemFiles.appFolders().sortedByDescending { SystemFiles.priority(it) }
+            appFolders = folders.size
+            val done = out.map { it.path }.toHashSet()
+            val t0 = SystemClock.elapsedRealtime()
+            var scanned = 0
+            var stopped: String? = null
+            for ((i, f) in folders.withIndex()) {
+                if (scanned >= MAX_FOLDER_APKS) { stopped = "stopped at the $MAX_FOLDER_APKS-APK limit"; break }
+                if (SystemClock.elapsedRealtime() - t0 > FOLDER_BUDGET_MS) { stopped = "stopped at the ${FOLDER_BUDGET_MS / 60000}-minute budget"; break }
+                val name = f.folder.substringAfterLast('/')
+                busy = "Scanning app ${i + 1}/${folders.size}: $name"
+                if (i % 5 == 0) changed()
+                var hadDex = false
+                for (apk in f.apks) {
+                    if (apk in done) continue
+                    val r = DexScanner.scan(name, apk, light = true)
+                    out += r
+                    hadDex = hadDex || r.dexFiles > 0
+                    scanned++
+                }
+                if (!hadDex) f.vdex.firstOrNull()?.let { out += DexScanner.scanContainer("$name (vdex)", it) }
+                if (i % 10 == 0) dexScans = out.toList()
+            }
+            dexScans = out.toList()
+            appScanNote = "${folders.size} app folders found; $scanned APKs scanned in ${(SystemClock.elapsedRealtime() - t0) / 1000} s" +
+                (stopped?.let { "; $it" } ?: "") + "; dirs: " + SystemFiles.dirNotes.entries.joinToString { "${it.key} ${it.value}" }
+            recorder.log(appScanNote!!)
+        }
+        step("List config file names (names only)") { configNames = SystemFiles.configNames() }
         discoveryMs = SystemClock.elapsedRealtime() - start
         busy = null
         recorder.log("Safe discovery finished in ${discoveryMs / 1000} s. Export the report next.")
@@ -181,5 +215,7 @@ class DiagnosticsViewModel(private val app: Context) {
 
     companion object {
         const val MAX_APKS = 60
+        const val MAX_FOLDER_APKS = 400
+        const val FOLDER_BUDGET_MS = 8 * 60_000L
     }
 }

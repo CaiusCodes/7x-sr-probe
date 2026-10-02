@@ -46,14 +46,35 @@ fun main(args: Array<String>) {
     check(runCatching { ReadOnlyGuard.invoke(unverified, ecarx.car) }.isFailure, "guard refuses unverified getPerceptionManager")
 
     check(Calls.log.none { it.startsWith("MUTATOR") || it.startsWith("UNVERIFIED") }, "no mutator or unverified method was invoked")
+    val T = au.local.zeekr.srprobe.model.Terms
+    check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")
+    check(T.perceptionScore("com.example.player.TrackInfo") == 0, "perception score: media TrackInfo ignored")
+    check(T.perceptionScore("org.json.JSONObject") == 0, "perception score: JSONObject ignored")
     println("vehicle calls: " + Calls.log.groupingBy { it.substringBefore('(') }.eachCount())
     println("ledger: " + ReadOnlyGuard.ledgerSnapshot())
 
     if (args.isNotEmpty()) {
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")
+        // v0.2: a dex image embedded in a larger file (as in a .vdex) is found and parsed.
+        val dex = java.util.zip.ZipFile(args[0]).use { z -> z.getInputStream(z.getEntry("classes.dex")).readBytes() }
+        val tmp = java.io.File.createTempFile("probe", ".vdex")
+        tmp.writeBytes(ByteArray(333) { 7 } + dex + ByteArray(91))
+        val v = DexScanner.scanContainer("vdex", tmp.path)
+        check(v.dexFiles == 1 && v.totalClasses == r.totalClasses, "vdex-style container: ${v.dexFiles} dex, ${v.totalClasses} classes")
+        val m = java.util.zip.ZipFile(args[0]).use { z -> z.getInputStream(z.getEntry("AndroidManifest.xml")).readBytes() }
+        check(runCatching { DexScanner.manifestStrings(m) }.isSuccess, "binary manifest string pool parses")
     }
     // Whole pipeline: discovery steps (most fail harmlessly without a real PackageManager) then every export format.
+    if (args.isNotEmpty()) {
+        // Fake system partition: one app folder holding the built APK, one holding only a vdex.
+        val root = java.nio.file.Files.createTempDirectory("sysapp").toFile()
+        java.io.File(root, "ZeekrAdasHmi").mkdirs(); java.io.File(args[0]).copyTo(java.io.File(root, "ZeekrAdasHmi/ZeekrAdasHmi.apk"))
+        val dex = java.util.zip.ZipFile(args[0]).use { z -> z.getInputStream(z.getEntry("classes.dex")).readBytes() }
+        java.io.File(root, "Stripped/oat/arm64").mkdirs(); java.io.File(root, "Stripped/Stripped.apk").writeBytes(java.io.File(args[0]).readBytes().copyOf(0))
+        java.io.File(root, "Stripped/oat/arm64/Stripped.vdex").writeBytes(ByteArray(64) + dex)
+        au.local.zeekr.srprobe.platform.SystemFiles.appDirsOverride = listOf(root.path, "/nonexistent/app")
+    }
     val vm = au.local.zeekr.srprobe.ui.DiagnosticsViewModel(FakeContext())
     vm.runSafeDiscovery()
     var waited = 0
@@ -63,9 +84,14 @@ fun main(args: Array<String>) {
     val ex = au.local.zeekr.srprobe.logging.ReportExporter(FakeContext(), vm)
     val md = ex.markdown(); val sum = ex.summary(); val js = ex.discoveryJson().toString()
     check(md.contains("## Known vehicle signals") && md.contains("Read-only invocation ledger"), "markdown report builds (${md.length} chars)")
-    check(sum.contains("SIGNALS") && sum.contains("ECARX: car AVAILABLE"), "summary builds (${sum.lines().size} lines)")
+    check(sum.contains("SURROUNDING-CAR LEADS") && sum.contains("ECARX: car AVAILABLE"), "summary builds (${sum.lines().size} lines)")
+    if (args.isNotEmpty()) {
+        check(vm.appFolders == 2, "app folder scan found 2 folders: ${vm.appScanNote}")
+        check(vm.dexScans.any { it.source == "Stripped (vdex)" && it.totalClasses > 100 }, "stripped app scanned through its vdex")
+        check(vm.dexScans.any { it.source == "ZeekrAdasHmi" && it.dexFiles > 0 }, "app APK scanned by folder")
+    }
     check(js.contains("signals"), "discovery json builds")
     check(Calls.log.none { it.startsWith("MUTATOR") || it.startsWith("UNVERIFIED") }, "still no mutator after full pipeline")
-    println(sum.lines().take(14).joinToString("\n"))
+    println(sum.lines().take(40).joinToString("\n"))
     println("SMOKE TEST PASSED")
 }
