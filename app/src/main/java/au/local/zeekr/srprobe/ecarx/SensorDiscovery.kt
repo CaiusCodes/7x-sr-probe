@@ -58,7 +58,7 @@ object SensorDiscovery {
                 out += NamedConstant(api.className, f.name, v, terms, readKinds(api.className, f.name))
             }
         }
-        return out.distinctBy { it.name to it.value }.sortedWith(compareBy({ it.declaringClass }, { it.name }))
+        return out.distinctBy { it.name to it.value }.sortedBy { it.declaringClass + "#" + it.name }
     }
 
     /** Opt-in only. Reads each readable id once. Ids below 0x00100000 are enum values, not signal ids: skipped. */

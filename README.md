@@ -15,8 +15,13 @@ Read-only diagnostic app for an Australian-market Zeekr 7X. It answers one quest
 
 ## Download
 
-Get `7x-sr-probe-v0.1-debug.apk` from the [Releases](../../releases) page. SHA-256: `461ac978714cc29eaf541c9243bef6f13e198c1e353cc7f1205e699c4660ef8c`.
+Get `7x-sr-probe-v0.1.1-debug.apk` from the [Releases](../../releases) page. SHA-256: `64a345abb145e59e083b44e219dd2b1bd374307fde91af694c9dad8ec7ba5cef`.
 
 ## Credits
 
 Vehicle API names and signal ids come from public research by the [dts88/zeekr-shortcut-car](https://github.com/dts88/zeekr-shortcut-car) project (GPL-3.0). No code was copied from it.
+
+## Changelog
+
+- **0.1.1** Fixes the "Reflect vendor classes" step crashing on the car (`BootstrapMethodError`). The build had left an invokedynamic call site in a Kotlin stdlib helper that Android cannot link. The helper is gone and `scripts/build-offline.sh` now fails if one reappears. Same signing key, so it installs over 0.1.
+- **0.1** First release.

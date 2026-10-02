@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and signs the SR Probe debug APK WITHOUT Gradle or Google's SDK download host.
-# Used to produce dist/7x-sr-probe-v0.1-debug.apk in an environment where dl.google.com was blocked.
+# Used to produce dist/7x-sr-probe-v0.1.1-debug.apk in an environment where dl.google.com was blocked.
 # The normal route is Android Studio / Gradle (see docs/BUILD_AND_INSTALL.md); both build the same sources.
 #
 # Needs: JDK 17+, kotlinc 2.0.x, Debian/Ubuntu android-sdk-build-tools (aapt2, dx, zipalign, apksigner),
@@ -18,8 +18,8 @@ COMPILE_JAR=${COMPILE_JAR:?set COMPILE_JAR to an Android 12 framework jar}
 OUT=${OUT:-$ROOT/build-offline}
 KEYSTORE=${KEYSTORE:-$HOME/.android/debug.keystore}
 PKG=au.local.zeekr.srprobe
-VERSION_CODE=1
-VERSION_NAME=0.1
+VERSION_CODE=2
+VERSION_NAME=0.1.1
 
 rm -rf "$OUT"; mkdir -p "$OUT/classes" "$OUT/res" "$OUT/dex"
 
@@ -37,6 +37,13 @@ STDLIB=$(dirname "$(readlink -f "$(command -v "$KOTLINC")")")/../lib/kotlin-stdl
 "$KOTLINC" -jvm-target 1.8 -Xlambdas=class -Xsam-conversions=class -Xstring-concat=inline -no-reflect \
     -classpath "$COMPILE_JAR" -d "$OUT/classes" $(find app/src/main/java -name '*.kt')
 
+# 3b. dx cannot desugar invokedynamic, and Android has no LambdaMetafactory, so a surviving indy call site
+# crashes on the head unit (v0.1 shipped with kotlin.comparisons.compareBy(vararg), which is built on indy
+# lambdas inside the Kotlin stdlib). Fail the build if app code has indy or calls a known indy-based helper.
+if find "$OUT/classes" -name '*.class' -print0 | xargs -0 javap -c -p 2>/dev/null | grep -E 'invokedynamic|ComparisonsKt.compareBy|kotlin/streams/jdk8|kotlin/uuid' ; then
+  echo "ERROR: invokedynamic-based code reachable from app classes; replace it (see comment)" >&2; exit 1
+fi
+
 # 4. Dex (app classes + Kotlin stdlib minus multi-release entries).
 mkdir -p "$OUT/stdlib"; (cd "$OUT/stdlib" && unzip -q -o "$STDLIB" -x 'META-INF/*')
 "$BUILD_TOOLS/dx" --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" "$OUT/classes" "$OUT/stdlib"
@@ -51,6 +58,6 @@ if [ ! -f "$KEYSTORE" ]; then
       -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null
 fi
 "$BUILD_TOOLS/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
-    --ks-key-alias androiddebugkey --out "$OUT/7x-sr-probe-v0.1-debug.apk" "$OUT/aligned.apk"
-"$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/7x-sr-probe-v0.1-debug.apk"
-echo "APK: $OUT/7x-sr-probe-v0.1-debug.apk"
+    --ks-key-alias androiddebugkey --out "$OUT/7x-sr-probe-v0.1.1-debug.apk" "$OUT/aligned.apk"
+"$BUILD_TOOLS/apksigner" verify --print-certs "$OUT/7x-sr-probe-v0.1.1-debug.apk"
+echo "APK: $OUT/7x-sr-probe-v0.1.1-debug.apk"
