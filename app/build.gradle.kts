@@ -12,8 +12,8 @@ android {
         // The 7X head unit reports Android 12 (API 31). 26 keeps the APK installable on older test devices.
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.4"
+        versionCode = 8
+        versionName = "0.5"
     }
 
     buildTypes {

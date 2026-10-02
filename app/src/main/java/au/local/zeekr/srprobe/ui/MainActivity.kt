@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.4", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.5", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -79,6 +79,7 @@ class MainActivity : Activity() {
         }.also { right.addView(it) }
         right.addView(button("Read SDK-named ADAS ids once (parked)") { optInNamed(false) })
         right.addView(button("Subscribe to SR-object feed (parked)") { optInSrFeed(false) })
+        right.addView(button("Query vehicle data provider (parked)") { optInProvider() })
         right.addView(text("Log", 18f, FG, bold = true).apply { setPadding(0, dp(16), 0, 0) })
         logView = text("", 13f, DIM).apply { typeface = Typeface.MONOSPACE }
         right.addView(logView)
@@ -138,6 +139,27 @@ class MainActivity : Activity() {
             }
             else -> toast(r)
         }
+    }
+
+    /** v0.5: read-only query of the exported vehicle data provider. */
+    private fun optInProvider() {
+        confirm("Query the vehicle data provider?",
+            "Reads content://com.zeekr.vehicle.data (exported by ZeekrVehicleService) with ContentResolver.query " +
+                "only. Nothing is inserted, updated or deleted. Parked only.") {
+            when (val r = vm.queryProvider(true) { showText(exporter.providerText()) }) {
+                null -> toast("Querying…")
+                else -> toast(r)
+            }
+        }
+    }
+
+    private fun showText(text: String) {
+        val tv = TextView(this).apply {
+            this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+            setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_Material_NoActionBar_Fullscreen)
+            .setView(ScrollView(this).apply { addView(tv) }).setPositiveButton("Close", null).show()
     }
 
     /** v0.4: subscribe to the live SR-object feed, parked only, read-only (register/unregister only). */

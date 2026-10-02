@@ -183,6 +183,21 @@ The observer is a `java.lang.reflect.Proxy` implementing `ISRObjectsObserver`. A
 
 **Not read-only, so never done here:** reading the camera/perception stream itself, sending anything on the feed interface, or keeping the subscription alive while driving.
 
+## G. Vehicle data provider query (v0.5, opt-in, parked only)
+
+| Call | Why it is read-only |
+|---|---|
+| `ContentResolver.query(uri, null, null, null, null)` | Android's read contract for a provider: returns a Cursor; cannot insert, update or delete. |
+| `ContentResolver.getType(uri)` | Returns a MIME string only. |
+
+- Only authority `com.zeekr.vehicle.data` (DataContentProvider, exported by ZeekrVehicleService, found by the v0.3 manifest scan).
+- URIs tried: the root, plus `content://com.zeekr.vehicle.data/...` strings already present in the vendor's own dex (discovery). No guessing or brute-forcing of paths. At most 20 URIs, 5 rows each.
+- Enforced in `ReadOnlyGuard.queryProvider/providerType` (`isProviderAllowed`); smoke-tested.
+- Never used: `insert`, `bulkInsert`, `update`, `delete`, `call`, `openFile`, `openAssetFile`, `applyBatch`, `registerContentObserver`.
+- Column names that look private are dropped; VIN-like values redacted.
+
+The v0.5 build also reports the exact exception when the ADCU SDK jar fails to load (no new calls).
+
 ## C. What the app writes
 
 ## C. What the app writes (all local, none to the vehicle)

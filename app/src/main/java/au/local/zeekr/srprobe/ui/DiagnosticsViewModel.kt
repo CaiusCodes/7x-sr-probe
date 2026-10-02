@@ -55,6 +55,7 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var configNames: List<String> = emptyList(); private set
     @Volatile var srInspect: List<au.local.zeekr.srprobe.platform.DexInspector.Result> = emptyList(); private set
     @Volatile var srFeed: SrFeed? = null; private set
+    @Volatile var providerResults: List<au.local.zeekr.srprobe.platform.ProviderProbe.UriResult> = emptyList(); private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
     /** Opt-in: query AIDL interface names of relevant binder services. Off by default. */
@@ -232,6 +233,24 @@ class DiagnosticsViewModel(private val app: Context) {
                 recorder.log("SR feed: " + feed.start(jar))
             }
             busy = null; changed()
+        }
+        return null
+    }
+
+    /** v0.5 opt-in: read-only query of com.zeekr.vehicle.data. Parked only. */
+    fun queryProvider(confirmedParkedByUser: Boolean, done: () -> Unit): String? {
+        val parked = reader.isParked()
+        if (parked == false) return "Gear does not read P. This step only runs parked."
+        if (parked == null && !confirmedParkedByUser) return "GEAR_UNKNOWN"
+        val vendorUris = dexScans.flatMap { it.matchingStrings }
+            .filter { it.startsWith("content://com.zeekr.vehicle.data") }.distinct()
+        worker.execute {
+            step("Opt-in: query vehicle data provider (read-only)") {
+                providerResults = au.local.zeekr.srprobe.platform.ProviderProbe.run(app, vendorUris)
+                recorder.log("Provider: ${providerResults.size} URIs, ${providerResults.count { it.error == null }} answered")
+            }
+            busy = null; changed()
+            main.post(done)
         }
         return null
     }

@@ -125,6 +125,32 @@ object ReadOnlyGuard {
         return unwrap { m.invoke(target, *args) }
     }
 
+    /**
+     * v0.5: content-provider reads (READ_ONLY_AUDIT.md section G). Only ContentResolver.query and getType,
+     * only on these authorities (exported by ZeekrVehicleService). insert/update/delete/call/openFile are
+     * never used.
+     */
+    val PROVIDER_AUTHORITIES = setOf("com.zeekr.vehicle.data")
+
+    fun isProviderAllowed(scheme: String?, authority: String?): Boolean =
+        scheme == "content" && authority in PROVIDER_AUTHORITIES
+
+    fun queryProvider(resolver: android.content.ContentResolver, uri: android.net.Uri): android.database.Cursor? {
+        if (!isProviderAllowed(uri.scheme, uri.authority)) {
+            throw ReadOnlyViolation("Refused provider read outside the allowlist: $uri")
+        }
+        count("provider:query(${uri.authority})")
+        return resolver.query(uri, null, null, null, null)
+    }
+
+    fun providerType(resolver: android.content.ContentResolver, uri: android.net.Uri): String? {
+        if (!isProviderAllowed(uri.scheme, uri.authority)) {
+            throw ReadOnlyViolation("Refused provider read outside the allowlist: $uri")
+        }
+        count("provider:getType(${uri.authority})")
+        return resolver.getType(uri)
+    }
+
     /** Android framework methods the probe may call by reflection. All are documented reads. */
     private val FRAMEWORK_ALLOWED = setOf(
         "android.os.ServiceManager.listServices()",

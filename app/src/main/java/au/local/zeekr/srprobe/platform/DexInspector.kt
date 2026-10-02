@@ -31,7 +31,7 @@ object DexInspector {
     /** Packages that hold SR / perception plumbing on the 7X (from the v0.2 car report). */
     val FOCUS_PREFIXES = listOf(
         "com.zeekr.sdk.adcu", "com.zeekr.sdk.drive", "com.zeekr.soa.adcu", "com.zeekr.autopilot.sr",
-        "com.zeekr.vehicle.someip", "com.zeekr.sr", "com.zeekr.launcher.manager"
+        "com.zeekr.vehicle.someip", "com.zeekr.sr", "com.zeekr.launcher.manager", "com.zeekr.vehicle.data"
     )
     private val FOCUS_WORDS = Regex("SRObject|SrService|SrStatus|Percep|Fusion|Obstacle|EgoCar|Adcu|ADCU")
     private val PLUMBING = Regex("(Service|Binder|Connect|Bind|Proxy|Manager|Provider|Stub)")

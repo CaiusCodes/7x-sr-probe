@@ -61,6 +61,9 @@ fun main(args: Array<String>) {
     check(runCatching { ReadOnlyGuard.invokeSr(navi.getMethod("sendCityInfo", obs), com.zeekr.sdk.adcu.NaviFake(), null) }.isFailure, "invokeSr refuses a sender")
     check(ReadOnlyGuard.invokeSr(navi.getMethod("getObjectID"), com.zeekr.sdk.adcu.NaviFake()) == 7L, "invokeSr runs an allowed read")
     val T = au.local.zeekr.srprobe.model.Terms
+    check(ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.vehicle.data"), "provider allowlist: com.zeekr.vehicle.data allowed")
+    check(!ReadOnlyGuard.isProviderAllowed("content", "com.android.contacts"), "provider allowlist: other authority refused")
+    check(!ReadOnlyGuard.isProviderAllowed("file", "com.zeekr.vehicle.data"), "provider allowlist: non-content scheme refused")
     check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")
     check(T.perceptionScore("com.example.player.TrackInfo") == 0, "perception score: media TrackInfo ignored")
     check(T.perceptionScore("org.json.JSONObject") == 0, "perception score: JSONObject ignored")

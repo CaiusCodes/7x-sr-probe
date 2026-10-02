@@ -120,10 +120,23 @@ class SrFeed(private val context: Context) {
 
     /** Load a class without running its static initialiser; app loader first, then the framework jar. */
     private fun resolve(name: String, jarPath: String?): Class<*>? {
-        runCatching { return Class.forName(name, false, javaClass.classLoader).also { loader = it.classLoader } }
-        if (jarPath != null) {
-            val dl = loader as? DexClassLoader ?: DexClassLoader(jarPath, context.codeCacheDir.absolutePath, null, javaClass.classLoader).also { loader = it }
-            runCatching { return Class.forName(name, false, dl) }
+        try {
+            return Class.forName(name, false, javaClass.classLoader).also { loader = it.classLoader }
+        } catch (t: Throwable) {
+            step("app class loader: ${ReadOnlyGuard.describe(t)}")
+        }
+        if (jarPath == null) { step("no framework jar holding $name was found by discovery"); return null }
+        val f = java.io.File(jarPath)
+        step("jar $jarPath: exists=${f.exists()} readable=${f.canRead()} size=${f.length()}")
+        try {
+            val dl = loader as? DexClassLoader
+                ?: DexClassLoader(jarPath, context.codeCacheDir.absolutePath, null, javaClass.classLoader).also { loader = it }
+            return Class.forName(name, false, dl)
+        } catch (t: Throwable) {
+            var e: Throwable? = t
+            val chain = ArrayList<String>()
+            while (e != null && chain.size < 4) { chain += ReadOnlyGuard.describe(e); e = e.cause?.takeIf { it !== e } }
+            step("DexClassLoader: " + chain.joinToString(" <- "))
         }
         return null
     }
