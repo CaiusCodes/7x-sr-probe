@@ -15,7 +15,7 @@ Read-only diagnostic app for an Australian-market Zeekr 7X. It answers one quest
 
 ## Download
 
-Get `7x-sr-probe-v0.1.1-debug.apk` from the [Releases](../../releases) page. SHA-256: `64a345abb145e59e083b44e219dd2b1bd374307fde91af694c9dad8ec7ba5cef`.
+Get `7x-sr-probe-v0.1.2-debug.apk` from the [Releases](../../releases) page. SHA-256: `f8fbfabbec2d0d4af49239ce63c31076fb3c4e3bc7bf3d356c727d0efcb4278b`.
 
 ## Credits
 
@@ -23,5 +23,6 @@ Vehicle API names and signal ids come from public research by the [dts88/zeekr-s
 
 ## Changelog
 
+- **0.1.2** Adds **Copy Report To Clipboard (in parts)** for cars where USB/file export doesn't work. It only copies text to the clipboard; the app still has no network permission.
 - **0.1.1** Fixes the "Reflect vendor classes" step crashing on the car (`BootstrapMethodError`). The build had left an invokedynamic call site in a Kotlin stdlib helper that Android cannot link. The helper is gone and `scripts/build-offline.sh` now fails if one reappears. Same signing key, so it installs over 0.1.
 - **0.1** First release.

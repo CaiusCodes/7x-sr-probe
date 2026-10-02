@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.1.1", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.1.2", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -70,6 +70,7 @@ class MainActivity : Activity() {
         right.addView(button("Export Report") { export() })
         right.addView(button("Save Report To Folder / USB…") { pickFolder() })
         right.addView(button("Share Report…") { share() })
+        right.addView(button("Copy Report To Clipboard (in parts)") { copyNextPart() })
         right.addView(text("Optional (off by default, see READ_ONLY_AUDIT.md)", 16f, DIM).apply { setPadding(0, dp(16), 0, dp(4)) })
         binderToggle = button("") {
             vm.queryBinderDescriptors = !vm.queryBinderDescriptors
@@ -153,6 +154,46 @@ class MainActivity : Activity() {
                 runOnUiThread { toast("Export failed: ${t.message}") }
             }
         }
+    }
+
+    private var clipParts: List<String> = emptyList()
+    private var clipNext = 0
+
+    /**
+     * No file picker or USB needed: copies the Markdown report to the clipboard in pieces small enough for the
+     * clipboard, one per press, so it can be pasted into a browser page or message. Nothing leaves the device
+     * unless you paste it somewhere yourself. A new part list is built each time you press after the last part.
+     */
+    private fun copyNextPart() {
+        vm.runOnWorker {
+            try {
+                if (clipNext == 0 || clipNext >= clipParts.size) {
+                    clipParts = splitForClipboard(exporter.markdown())
+                    clipNext = 0
+                }
+                val i = clipNext++
+                val text = "[7X SR Probe report part ${i + 1}/${clipParts.size}]\n" + clipParts[i]
+                runOnUiThread {
+                    val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("srprobe-report", text))
+                    toast("Copied part ${i + 1} of ${clipParts.size} (${text.length / 1000} KB). Paste it, then press again for " +
+                        if (i + 1 < clipParts.size) "part ${i + 2}." else "nothing: that was the last part; pressing again restarts at part 1.")
+                }
+            } catch (t: Throwable) {
+                runOnUiThread { toast("Copy failed: ${t.message}") }
+            }
+        }
+    }
+
+    private fun splitForClipboard(md: String, maxChars: Int = 120_000): List<String> {
+        val parts = ArrayList<String>()
+        val cur = StringBuilder()
+        for (line in md.lineSequence()) {
+            if (cur.length + line.length + 1 > maxChars && cur.isNotEmpty()) { parts += cur.toString(); cur.setLength(0) }
+            cur.append(line.take(maxChars)).append('\n')
+        }
+        if (cur.isNotEmpty()) parts += cur.toString()
+        return parts
     }
 
     private fun pickFolder() {

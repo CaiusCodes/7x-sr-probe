@@ -164,6 +164,7 @@ Source/reference:    ecarx/EcarxReflection.kt
 - `files/srprobe/srprobe-events.jsonl` (capture), `files/srprobe/export/*` (report files) in the app's private storage.
 - On **Export**: copies to `Download/SRProbe/` through MediaStore (Android 10+).
 - On **Save To Folder / USB…**: copies to the folder you pick in the system picker.
+- On **Copy Report To Clipboard (in parts)** (0.1.2): `ClipboardManager.setPrimaryClip` with up to ~120 KB of the Markdown report per press. Nothing leaves the device unless you paste it somewhere.
 - On **Share…**: a read-only, non-exported `ReportProvider` grants the chosen app temporary read access to those files.
 - No `INTERNET` permission. No network code. No settings, properties or system files are written.
 
