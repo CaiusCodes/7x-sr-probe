@@ -15,7 +15,7 @@ Read-only diagnostic app for an Australian-market Zeekr 7X. It answers one quest
 
 ## Download
 
-Get `7x-sr-probe-v0.3-debug.apk` from the [Releases](../../releases) page. SHA-256: `9a27c4e7aa41372c583954bb2f75c0ddf36d98f3ba79dde3ae3d9cd9196448bb`.
+Get `7x-sr-probe-v0.4-debug.apk` from the [Releases](../../releases) page. SHA-256: `5f031c96c8004cb5f6f82165942a96606f9abeec6d2a0de79a82c791964ef24c`.
 
 ## Credits
 
@@ -23,6 +23,7 @@ Vehicle API names and signal ids come from public research by the [dts88/zeekr-s
 
 ## Changelog
 
+- **0.4** Adds an opt-in, parked-only **Subscribe to SR-object feed** button. It connects to the car's AdcuService and calls `registerSRObjectsObserver`, the same read-only subscribe the factory 3D view uses, to receive surrounding-vehicle objects live. A separate guard allowlist permits only zero-argument reads and the observer subscribe/unsubscribe; every `send`/`set`/`init` method is refused. See READ_ONLY_AUDIT.md section F.
 - **0.3** v0.2 on the car found "SR objects" (perception fusion objects from the driving computer) in ZeekrVehicleService, ZeekrCarLauncherScene3D, CarControlMultiDisplay and XCLauncher3. v0.3 reads those apps' class members and manifests as bytes, to show what an SR object contains and which service, permission and action hand it out. Still names only; nothing is bound or called.
 - **0.2** Deeper names-only search for surrounding-car data. App Lab hides most packages, so discovery now lists the system app folders directly and reads class names, vendor interface names, intent actions and manifest strings from every APK there (or its `.vdex` when the APK is stripped). It also lists config file names in `etc` folders. The summary leads with ranked perception-like names. No new vehicle calls; see READ_ONLY_AUDIT.md section B.
 - **0.1.3** Adds **Show Summary (to photograph)**: a few full-screen pages of the key findings, for cars where no export route works. Display only; nothing is written or sent.

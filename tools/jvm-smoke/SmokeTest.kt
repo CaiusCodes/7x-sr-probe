@@ -46,6 +46,20 @@ fun main(args: Array<String>) {
     check(runCatching { ReadOnlyGuard.invoke(unverified, ecarx.car) }.isFailure, "guard refuses unverified getPerceptionManager")
 
     check(Calls.log.none { it.startsWith("MUTATOR") || it.startsWith("UNVERIFIED") }, "no mutator or unverified method was invoked")
+
+    // v0.4: the SR-feed allowlist permits only zero-arg reads and the observer subscribe/unsubscribe.
+    val navi = com.zeekr.sdk.adcu.NaviFake::class.java
+    val obs = com.zeekr.sdk.adcu.ISrObsFake::class.java
+    check(ReadOnlyGuard.isSrAllowed(navi.getMethod("getNavi")), "SR allowlist: getNavi (zero-arg read) allowed")
+    check(ReadOnlyGuard.isSrAllowed(navi.getMethod("getObjectID")), "SR allowlist: bean getter allowed")
+    check(ReadOnlyGuard.isSrAllowed(navi.getMethod("registerSRObjectsObserver", obs)), "SR allowlist: registerSRObjectsObserver allowed")
+    check(ReadOnlyGuard.isSrAllowed(navi.getMethod("unregisterSRObjectsObserver", obs)), "SR allowlist: unregister allowed")
+    check(!ReadOnlyGuard.isSrAllowed(navi.getMethod("sendCityInfo", obs)), "SR allowlist: sendCityInfo refused")
+    check(!ReadOnlyGuard.isSrAllowed(navi.getMethod("setThing", Int::class.javaPrimitiveType)), "SR allowlist: setThing refused")
+    check(!ReadOnlyGuard.isSrAllowed(navi.getMethod("init", Array<String>::class.java)), "SR allowlist: init refused")
+    check(!ReadOnlyGuard.isSrAllowed(String::class.java.getMethod("length")), "SR allowlist: non-zeekr class refused")
+    check(runCatching { ReadOnlyGuard.invokeSr(navi.getMethod("sendCityInfo", obs), com.zeekr.sdk.adcu.NaviFake(), null) }.isFailure, "invokeSr refuses a sender")
+    check(ReadOnlyGuard.invokeSr(navi.getMethod("getObjectID"), com.zeekr.sdk.adcu.NaviFake()) == 7L, "invokeSr runs an allowed read")
     val T = au.local.zeekr.srprobe.model.Terms
     check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")
     check(T.perceptionScore("com.example.player.TrackInfo") == 0, "perception score: media TrackInfo ignored")

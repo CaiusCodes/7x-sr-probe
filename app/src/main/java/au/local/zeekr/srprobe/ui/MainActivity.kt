@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.3", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.4", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -78,6 +78,7 @@ class MainActivity : Activity() {
             render()
         }.also { right.addView(it) }
         right.addView(button("Read SDK-named ADAS ids once (parked)") { optInNamed(false) })
+        right.addView(button("Subscribe to SR-object feed (parked)") { optInSrFeed(false) })
         right.addView(text("Log", 18f, FG, bold = true).apply { setPadding(0, dp(16), 0, 0) })
         logView = text("", 13f, DIM).apply { typeface = Typeface.MONOSPACE }
         right.addView(logView)
@@ -137,6 +138,66 @@ class MainActivity : Activity() {
             }
             else -> toast(r)
         }
+    }
+
+    /** v0.4: subscribe to the live SR-object feed, parked only, read-only (register/unregister only). */
+    private fun optInSrFeed(confirmed: Boolean) {
+        if (!confirmed) {
+            confirm("Subscribe to the SR-object feed?",
+                "Connects to the car's AdcuService and calls registerSRObjectsObserver, the same read-only " +
+                    "subscribe the factory 3D view uses, to receive surrounding-vehicle objects. Every send/set " +
+                    "method is blocked by the guard. Parked only. It unsubscribes when you close the page.") { runSrFeed() }
+            return
+        }
+        runSrFeed()
+    }
+
+    private fun runSrFeed() {
+        when (val r = vm.startSrFeed(false)) {
+            null -> showSrFeed()
+            "GEAR_UNKNOWN" -> confirm("Gear cannot be read", "Confirm the vehicle is in Park.") {
+                if (vm.startSrFeed(true) == null) showSrFeed()
+            }
+            else -> toast(r)
+        }
+    }
+
+    /** Full-screen live view of the SR feed; refreshes while open and unsubscribes on close. */
+    private fun showSrFeed() {
+        val tv = TextView(this).apply {
+            textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+            setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
+        }
+        val scroll = ScrollView(this).apply { addView(tv) }
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val tick = object : Runnable {
+            override fun run() {
+                val f = vm.srFeed
+                tv.text = buildString {
+                    appendLine("SR-OBJECT FEED (read-only subscribe)")
+                    appendLine("updates received: ${f?.updates?.get() ?: 0}")
+                    appendLine()
+                    appendLine(f?.outcome ?: "not started")
+                    appendLine()
+                    f?.last?.let { s ->
+                        s.carPos?.let { appendLine("my car: ${it.fields}") }
+                        appendLine("objects: ${s.objects.size}")
+                        s.objects.take(30).forEachIndexed { i, o -> appendLine("  [$i] ${o.fields}") }
+                        s.raw?.let { appendLine("payload fields: $it") }
+                    }
+                    appendLine()
+                    appendLine("--- steps ---")
+                    f?.steps?.forEach { appendLine(it) }
+                }
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.post(tick)
+        AlertDialog.Builder(this, android.R.style.Theme_Material_NoActionBar_Fullscreen)
+            .setView(scroll)
+            .setPositiveButton("Close (unsubscribe)", null)
+            .setOnDismissListener { handler.removeCallbacks(tick); vm.stopSrFeed() }
+            .show()
     }
 
     private fun export(then: ((List<File>) -> Unit)? = null) {

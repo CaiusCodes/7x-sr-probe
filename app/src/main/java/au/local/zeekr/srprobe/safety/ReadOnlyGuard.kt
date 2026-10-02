@@ -90,6 +90,41 @@ object ReadOnlyGuard {
         return unwrap { m.invoke(target, *args) }
     }
 
+    /**
+     * v0.4 SR-feed subscription (audited separately in READ_ONLY_AUDIT.md section F).
+     *
+     * This is the ONLY path that touches the Zeekr perception SDK (`com.zeekr.*`). Exactly two kinds of
+     * call are permitted, and only on Zeekr-namespace classes:
+     *   1. zero-argument getters (`get`, `getNavi`, `getXxx`, `isXxx`) — pure reads that return the API
+     *      handle or a received data bean's field; they take nothing and change nothing;
+     *   2. the observer (un)subscribe pair below, each taking a single callback interface — they ask the
+     *      service to DELIVER perception updates to us; they send no vehicle command and carry no payload.
+     * Every other SDK method — all `send*`, `set*`, `init*`, `recoverRegistered`, `call`/`asyncCall`,
+     * `onTransact` and the rest — is refused here and listed in the report, never invoked.
+     */
+    private val SR_OBSERVER_METHODS = setOf("registerSRObjectsObserver", "unregisterSRObjectsObserver")
+    private const val SR_NAMESPACE = "com.zeekr."
+
+    fun isSrAllowed(m: Method): Boolean {
+        if (!m.declaringClass.name.startsWith(SR_NAMESPACE)) return false
+        val args = m.parameterTypes
+        // (1) zero-arg reads.
+        if (args.isEmpty() && (m.name.startsWith("get") || m.name.startsWith("is"))) {
+            return !MUTATING_PREFIXES.any { m.name.startsWith(it) }
+        }
+        // (2) the exact observer subscribe/unsubscribe, with a single callback-interface argument.
+        return m.name in SR_OBSERVER_METHODS && args.size == 1 && args[0].isInterface
+    }
+
+    /** Invoke an SR-feed method that passed [isSrAllowed], or throw without invoking it. */
+    fun invokeSr(m: Method, target: Any?, vararg args: Any?): Any? {
+        if (!isSrAllowed(m)) {
+            throw ReadOnlyViolation("Refused (not on SR read-only allowlist): ${m.declaringClass.name}.${m.name}(${shapeOf(m)})")
+        }
+        count("sr:${m.declaringClass.name}.${m.name}(${shapeOf(m)})")
+        return unwrap { m.invoke(target, *args) }
+    }
+
     /** Android framework methods the probe may call by reflection. All are documented reads. */
     private val FRAMEWORK_ALLOWED = setOf(
         "android.os.ServiceManager.listServices()",

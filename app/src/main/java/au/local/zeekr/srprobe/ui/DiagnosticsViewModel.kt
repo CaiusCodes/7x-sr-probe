@@ -8,6 +8,7 @@ import au.local.zeekr.srprobe.ecarx.CaptureSession
 import au.local.zeekr.srprobe.ecarx.EcarxAvailability
 import au.local.zeekr.srprobe.ecarx.EcarxReflection
 import au.local.zeekr.srprobe.ecarx.SensorDiscovery
+import au.local.zeekr.srprobe.ecarx.SrFeed
 import au.local.zeekr.srprobe.ecarx.VehicleSignalReader
 import au.local.zeekr.srprobe.logging.EventRecorder
 import au.local.zeekr.srprobe.model.Availability
@@ -53,6 +54,7 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var appScanNote: String? = null; private set
     @Volatile var configNames: List<String> = emptyList(); private set
     @Volatile var srInspect: List<au.local.zeekr.srprobe.platform.DexInspector.Result> = emptyList(); private set
+    @Volatile var srFeed: SrFeed? = null; private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
     /** Opt-in: query AIDL interface names of relevant binder services. Off by default. */
@@ -213,6 +215,31 @@ class DiagnosticsViewModel(private val app: Context) {
             busy = null; changed()
         }
         return null
+    }
+
+    /** v0.4 opt-in: subscribe to the SR-object feed. Parked only. Returns null when started, else a reason. */
+    fun startSrFeed(confirmedParkedByUser: Boolean): String? {
+        val parked = reader.isParked()
+        if (parked == false) return "Gear does not read P. The SR feed only runs while parked."
+        if (parked == null && !confirmedParkedByUser) return "GEAR_UNKNOWN"
+        val jar = dexScans.map { it.path }.firstOrNull { it.contains("ts-carplay-adapter") }
+            ?: dexScans.firstOrNull { it.vendorClassNames.any { c -> c.startsWith("com.zeekr.sdk.adcu") } }?.path
+        val feed = SrFeed(app)
+        srFeed = feed
+        changed()
+        worker.execute {
+            step("Opt-in: subscribe to SR-object feed (parked, read-only)") {
+                recorder.log("SR feed: " + feed.start(jar))
+            }
+            busy = null; changed()
+        }
+        return null
+    }
+
+    fun stopSrFeed() = worker.execute {
+        srFeed?.stop()
+        recorder.log("SR feed stopped")
+        changed()
     }
 
     fun runOnWorker(block: () -> Unit) = worker.execute(block)

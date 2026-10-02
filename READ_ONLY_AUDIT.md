@@ -1,4 +1,4 @@
-# READ_ONLY_AUDIT.md — 7X SR Probe v0.3
+# READ_ONLY_AUDIT.md — 7X SR Probe v0.4
 
 This file lists every vehicle-specific and platform method the app invokes, why each is believed to be read-only, and what the app deliberately does **not** call. It was written against the source in `app/src/main/java` and must be updated before any new invocation is added.
 
@@ -149,6 +149,7 @@ Source/reference:    ecarx/EcarxReflection.kt
 | Call | Purpose | Why read-only |
 |---|---|---|
 | `PackageManager.getInstalledPackages(0)`, `getPackageInfo(pkg, GET_ACTIVITIES / GET_SERVICES / GET_RECEIVERS / GET_PROVIDERS / GET_PERMISSIONS)`, `ApplicationInfo.loadLabel` | Package inventory (brief §7) | Public metadata queries. No component is started, bound or queried. Content providers are listed, never queried. |
+| `DexClassLoader` load of the framework jar holding `com.zeekr.sdk.adcu.AdcuAPI` (v0.4, only when you press Subscribe) | Reach the SDK the factory view uses | Loads the jar's classes with `initialize=false`; code runs only via the section F allowlist. |
 | `Context.checkSelfPermission(p)` | Granted/denied table | Query only. Includes a few permissions the app does not request (CAMERA, location, car.*) to document container defaults. Nothing is requested at runtime. |
 | `PackageManager.getSystemAvailableFeatures()` | Feature list | Query. |
 | `DisplayManager.getDisplays()`, `Display.getRealMetrics()` | Display list (a cluster/HUD display may appear) | Query. Nothing is drawn on other displays. |
@@ -162,6 +163,27 @@ Source/reference:    ecarx/EcarxReflection.kt
 | **v0.3:** member-level read of up to 12 APKs/jars that v0.2 tied to SR objects (ZeekrVehicleService, ZeekrCarLauncherScene3D, CarControlMultiDisplay, XCLauncher3, ZeekrCarService, the `ts-carplay-adapter.jar` SDK, or any source whose names mention SRObject / `autopilot.sr` / `soa.adcu`) | Which fields an SR object has, which class delivers it, and which service, permission and intent action guard it | `platform/DexInspector.kt` reads the dex class, field, method and prototype tables, and walks the manifest's binary-XML elements (service, provider, receiver, permission, action). Bytes only: no class is loaded, no service bound, no provider queried, no intent sent. |
 | **v0.2:** `File.list()` on `/system/etc`, `/system_ext/etc`, `/product/etc`, `/vendor/etc`, `/odm/etc` (two levels) | File names of configs that would reveal a perception transport (SOME/IP, DDS, ADAS, cluster) | Directory listing only. File contents are not opened. |
 | `Application.getProcessName()`, `Process.myUid()/myPid()`, `Build.*` | Environment | Query. |
+
+## F. SR-object feed subscription (v0.4, opt-in, parked only)
+
+A separate button, **Subscribe to SR-object feed (parked)**, off unless pressed. It receives the surrounding-vehicle ("SR object") feed the factory 3D view uses, through the same public call: `AdcuAPI.get().getNavi().registerSRObjectsObserver(observer)`. The user confirmed this step on 2026-10-02.
+
+Every call into the Zeekr SDK (`com.zeekr.*`) goes through `ReadOnlyGuard.invokeSr`, whose allowlist (`safety/ReadOnlyGuard.kt`, `isSrAllowed`) permits only two kinds of call, and only on Zeekr-namespace classes:
+
+| Call | Shape | Why read-only |
+|---|---|---|
+| Zero-argument getters: `AdcuAPI.get()`, `getNavi()`, and the `get*`/`is*` accessors on received `SRObject` / `SRObjects` / position beans | no arguments | They return the API handle or read a field off a bean already delivered to us. They take nothing and change nothing. A name beginning with a mutating verb is refused even so. |
+| `registerSRObjectsObserver(observer)` / `unregisterSRObjectsObserver(observer)` | one callback-interface argument | They ask the service to **deliver** perception updates to us, and to stop. They carry no payload and send no vehicle command. This is the same subscribe the factory launcher makes. |
+
+The observer is a `java.lang.reflect.Proxy` implementing `ISRObjectsObserver`. A Proxy can only **receive** callbacks; it cannot call back into the service. On each callback it reads the delivered `SRObjects` with the zero-argument getters above and keeps the latest snapshot in memory only. The subscription is torn down (`unregisterSRObjectsObserver`) when the page closes.
+
+**Refused here and listed only:** everything else on these classes — all `send*` (e.g. `sendCityInfo`, `sendLineInfoInf`), every `set*`, `init*`, `recoverRegistered`, `call` / `asyncCall` / `asyncBinderCall`, `onTransact`, and any manager getter that takes arguments. If a step needs a method not on the allowlist, the guard throws `ReadOnlyViolation` and the report says where it stopped; nothing unlisted runs.
+
+**Class loading:** `com.zeekr.sdk.adcu.AdcuAPI` is not on an ordinary app's class path on this head unit, so it is loaded from its framework jar with `DexClassLoader`. Classes are resolved with `Class.forName(name, initialize = false, …)`; a static initialiser runs only when an allowlisted call first uses the class. No hidden-API exemption or boot-classpath patching is used. If the jar cannot be loaded, or the SDK will not initialise, or the service refuses the connection, that is reported as the result.
+
+**Not read-only, so never done here:** reading the camera/perception stream itself, sending anything on the feed interface, or keeping the subscription alive while driving.
+
+## C. What the app writes
 
 ## C. What the app writes (all local, none to the vehicle)
 

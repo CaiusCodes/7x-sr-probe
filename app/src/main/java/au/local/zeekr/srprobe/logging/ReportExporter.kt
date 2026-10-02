@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.3 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.4 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -228,6 +228,19 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             appendLine()
         }
 
+        vm.srFeed?.let { f ->
+            appendLine("## SR feed subscribe (v0.4)")
+            appendLine("- Updates received: ${f.updates.get()}")
+            appendLine("- Outcome: ${f.outcome}")
+            f.last?.let { s ->
+                s.carPos?.let { appendLine("- My car: ${it.fields}") }
+                appendLine("- Objects (${s.objects.size}):")
+                s.objects.take(40).forEachIndexed { i, o -> appendLine("  - [$i] ${o.fields}") }
+            }
+            appendLine("- Steps:")
+            f.steps.forEach { appendLine("  - $it") }
+            appendLine()
+        }
         appendLine("## SR object details (v0.3)")
         appendLine("```")
         append(srDetails(summaryMode = false))
@@ -313,7 +326,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.3 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.4 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -382,13 +395,19 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             }
         appendLine()
         appendLine("Signals: " + vm.signals.filter { it.availability == Availability.AVAILABLE }.joinToString { "${it.label}=${it.decodedValue ?: it.rawValue}" })
+        vm.srFeed?.let { f ->
+            appendLine()
+            appendLine("SR FEED SUBSCRIBE (v0.4): updates=${f.updates.get()}")
+            appendLine("  ${f.outcome.take(200)}")
+            f.last?.let { s -> appendLine("  last: ${s.objects.size} objects${s.carPos?.let { c -> ", car ${c.fields}" } ?: ""}") }
+        }
         appendLine("END OF SUMMARY")
     }
 
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.3")
+        put("app", "7X SR Probe 0.4")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {
