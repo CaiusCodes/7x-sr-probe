@@ -52,6 +52,7 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var appFolders: Int = 0; private set
     @Volatile var appScanNote: String? = null; private set
     @Volatile var configNames: List<String> = emptyList(); private set
+    @Volatile var srInspect: List<au.local.zeekr.srprobe.platform.DexInspector.Result> = emptyList(); private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
     /** Opt-in: query AIDL interface names of relevant binder services. Off by default. */
@@ -152,6 +153,20 @@ class DiagnosticsViewModel(private val app: Context) {
             recorder.log(appScanNote!!)
         }
         step("List config file names (names only)") { configNames = SystemFiles.configNames() }
+        step("Inspect SR-object apps (names only)") {
+            val hits = dexScans.filter { d ->
+                d.source.substringBefore(" (vdex)") in SR_APPS || d.path.contains("ts-carplay-adapter") ||
+                    d.perceptionClasses.any { SR_HINT.containsMatchIn(it) } || d.endpointStrings.any { SR_HINT.containsMatchIn(it) }
+            }.distinctBy { it.path }.take(12)
+            val res = ArrayList<au.local.zeekr.srprobe.platform.DexInspector.Result>()
+            for (d in hits) {
+                busy = "Inspecting ${d.source}"
+                changed()
+                res += au.local.zeekr.srprobe.platform.DexInspector.inspect(d.source, d.path)
+                srInspect = res.toList()
+            }
+            recorder.log("SR inspection: ${res.size} sources, ${res.sumOf { it.classes.size }} classes")
+        }
         discoveryMs = SystemClock.elapsedRealtime() - start
         busy = null
         recorder.log("Safe discovery finished in ${discoveryMs / 1000} s. Export the report next.")
@@ -216,6 +231,8 @@ class DiagnosticsViewModel(private val app: Context) {
     companion object {
         const val MAX_APKS = 60
         const val MAX_FOLDER_APKS = 400
+        val SR_APPS = setOf("ZeekrVehicleService", "ZeekrCarLauncherScene3D", "CarControlMultiDisplay", "XCLauncher3", "ZeekrCarService")
+        val SR_HINT = Regex("SRObject|autopilot\\.sr|PercepFusion|soa\\.adcu|sdk\\.adcu")
         const val FOLDER_BUDGET_MS = 8 * 60_000L
     }
 }

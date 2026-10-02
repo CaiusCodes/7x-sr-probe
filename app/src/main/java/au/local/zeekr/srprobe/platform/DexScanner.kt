@@ -28,6 +28,7 @@ object DexScanner {
     private val IDENT = Regex("^[A-Za-z0-9_.$/:\\-]{4,160}$")
     private val AIDL = Regex("^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+\\.I[A-Z][A-Za-z0-9_]*$")
     private val DEX_ENTRY = Regex("classes\\d*\\.dex")
+    private val ANON = Regex("\\$\\d")
 
     private class Acc(val light: Boolean) {
         val classes = LinkedHashSet<String>()
@@ -162,7 +163,7 @@ object DexScanner {
             val name = desc.substring(1, desc.length - 1).replace('/', '.')
             if (Terms.isRelevantClass(name) && acc.classes.size < acc.maxClasses) acc.classes += name
             if (!acc.light && Terms.isVendor(name) && acc.vendor.size < MAX_VENDOR_CLASSES) acc.vendor += name
-            if (!name.contains("$\$") && acc.perception.size < MAX_PERCEPTION * 4) {
+            if (!name.contains("$\$") && !ANON.containsMatchIn(name) && acc.perception.size < MAX_PERCEPTION * 4) {
                 val score = Terms.perceptionScore(name)
                 if (score >= 2) acc.perception[name] = score
             }
@@ -182,7 +183,7 @@ object DexScanner {
     private fun isEndpoint(s: String): Boolean {
         if (s.contains("au.local.zeekr")) return false // this app's own provider
         if (s.startsWith("content://")) return Terms.isVendor(s.removePrefix("content://")) || s.contains("zeekr") || s.contains("ecarx")
-        if (!(Terms.isVendor(s) || s.startsWith("vendor."))) return false
+        if (!(Terms.isVendor(s) || s.startsWith("vendor.")) || ANON.containsMatchIn(s)) return false
         return AIDL.matches(s) || s.contains(".action.", ignoreCase = true) || s.contains(".ACTION_") || Terms.perceptionScore(s) >= 2
     }
 

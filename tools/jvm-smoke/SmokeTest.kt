@@ -73,7 +73,12 @@ fun main(args: Array<String>) {
         val dex = java.util.zip.ZipFile(args[0]).use { z -> z.getInputStream(z.getEntry("classes.dex")).readBytes() }
         java.io.File(root, "Stripped/oat/arm64").mkdirs(); java.io.File(root, "Stripped/Stripped.apk").writeBytes(java.io.File(args[0]).readBytes().copyOf(0))
         java.io.File(root, "Stripped/oat/arm64/Stripped.vdex").writeBytes(ByteArray(64) + dex)
+        if (args.size > 1) { java.io.File(root, "ZeekrVehicleService").mkdirs(); java.io.File(args[1]).copyTo(java.io.File(root, "ZeekrVehicleService/ZeekrVehicleService.apk")) }
         au.local.zeekr.srprobe.platform.SystemFiles.appDirsOverride = listOf(root.path, "/nonexistent/app")
+        val man = au.local.zeekr.srprobe.platform.ManifestReader.components(
+            java.util.zip.ZipFile(args[0]).use { z -> z.getInputStream(z.getEntry("AndroidManifest.xml")).readBytes() })
+        println("manifest: " + man.joinToString(" | "))
+        check(man.any { it.contains("provider") && it.contains("authorities=au.local.zeekr.srprobe.reports") && it.contains("exported=false") }, "manifest walker reads provider attributes")
     }
     val vm = au.local.zeekr.srprobe.ui.DiagnosticsViewModel(FakeContext())
     vm.runSafeDiscovery()
@@ -86,9 +91,16 @@ fun main(args: Array<String>) {
     check(md.contains("## Known vehicle signals") && md.contains("Read-only invocation ledger"), "markdown report builds (${md.length} chars)")
     check(sum.contains("SURROUNDING-CAR LEADS") && sum.contains("ECARX: car AVAILABLE"), "summary builds (${sum.lines().size} lines)")
     if (args.isNotEmpty()) {
-        check(vm.appFolders == 2, "app folder scan found 2 folders: ${vm.appScanNote}")
+        check(vm.appFolders == (if (args.size > 1) 3 else 2), "app folder scan found its folders: ${vm.appScanNote}")
         check(vm.dexScans.any { it.source == "Stripped (vdex)" && it.totalClasses > 100 }, "stripped app scanned through its vdex")
         check(vm.dexScans.any { it.source == "ZeekrAdasHmi" && it.dexFiles > 0 }, "app APK scanned by folder")
+        if (args.size > 1) {
+            val sr = vm.srInspect.flatMap { it.classes }.firstOrNull { it.name == "com.zeekr.sdk.adcu.bean.SRObject" }
+            println("SRObject detail: $sr")
+            check(sr != null && "float posX" in sr.fields && sr.methods.any { it == "float getPosX()" } && "Serializable" in sr.interfaces,
+                "SR inspector lists SRObject fields, methods and interfaces")
+            check(sum.contains("SR OBJECT DETAILS") && sum.contains("f float posY"), "summary shows SR object fields")
+        }
     }
     check(js.contains("signals"), "discovery json builds")
     check(Calls.log.none { it.startsWith("MUTATOR") || it.startsWith("UNVERIFIED") }, "still no mutator after full pipeline")

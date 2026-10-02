@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.2 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.3 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -228,6 +228,11 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             appendLine()
         }
 
+        appendLine("## SR object details (v0.3)")
+        appendLine("```")
+        append(srDetails(summaryMode = false))
+        appendLine("```")
+        appendLine()
         appendLine("## Zeekr Vision / SR indicators")
         val hints = ArrayList<String>()
         pk?.relevant?.filter { Terms.match(it.packageName + " " + (it.label ?: ""), listOf("vision", "sr", "scene", "hud", "cluster", "adas", "pilot")).isNotEmpty() }
@@ -281,11 +286,34 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ On-screen summary
 
     /** A few screens of text meant to be photographed in the car: the findings that decide what v0.2 does. */
+    /** v0.3: what SR objects contain and which components hand them out (names only). */
+    fun srDetails(summaryMode: Boolean): String = buildString {
+        val res = vm.srInspect
+        appendLine("SR OBJECT DETAILS (${res.size} sources; names and types only, nothing invoked)")
+        if (res.isEmpty()) { appendLine("  (not run or nothing found)"); return@buildString }
+        for (r in res) {
+            appendLine("== ${r.source}  ${r.path}${r.note?.let { "  [$it]" } ?: ""}")
+            val man = if (summaryMode) r.manifest.filter { l ->
+                val t = l.trim()
+                t.startsWith("manifest") || t.startsWith("permission ") || t.startsWith("service") || t.startsWith("provider") ||
+                    (t.startsWith("action") && (t.contains("zeekr") || t.contains("ecarx") || t.contains("geely")))
+            }.take(40) else r.manifest
+            man.forEach { appendLine("  M $it") }
+            val classes = if (summaryMode) r.classes.take(30) else r.classes
+            for (c in classes) {
+                appendLine("  C ${c.name}${c.superName?.let { " : ${it.substringAfterLast('.')}" } ?: ""}${if (c.interfaces.isNotEmpty()) " implements " + c.interfaces.joinToString() else ""}")
+                (if (summaryMode) c.fields.filter { !it.startsWith("static") }.take(25) else c.fields).forEach { appendLine("      f $it") }
+                (if (summaryMode) c.methods.filter { m -> !m.contains(" <init>(") && !m.contains(" component") && !m.contains(" copy") }.take(20) else c.methods).forEach { appendLine("      m $it") }
+            }
+            if (summaryMode && r.classes.size > 30) appendLine("  … ${r.classes.size - 30} more classes in the exported report")
+        }
+    }
+
     fun summary(): String = buildString {
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.2 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.3 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -297,7 +325,8 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         appendLine("Sources scanned ${scans.size}; with dex ${scans.count { it.dexFiles > 0 }}; unreadable ${scans.count { it.note?.contains("not readable") == true }}")
         appendLine()
 
-        appendLine("SURROUNDING-CAR LEADS: CLASS NAMES (score, name, where; names only, nothing invoked)")
+        appendLine(srDetails(summaryMode = true))
+        appendLine("OTHER SURROUNDING-CAR LEADS: CLASS NAMES (score, name, where; names only, nothing invoked)")
         val best = HashMap<String, Pair<Int, String>>()
         scans.forEach { d ->
             d.perceptionClasses.forEach { e ->
@@ -307,7 +336,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             }
         }
         best.entries.sortedWith(Comparator { x, y -> if (y.value.first != x.value.first) y.value.first - x.value.first else x.key.compareTo(y.key) })
-            .take(80).forEach { appendLine("  ${it.value.first} ${it.key}  [${it.value.second}]") }
+            .take(40).forEach { appendLine("  ${it.value.first} ${it.key}  [${it.value.second}]") }
         if (best.isEmpty()) appendLine("  (none)")
         appendLine()
 
@@ -326,8 +355,8 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
             val sy = Terms.perceptionScore(y.key) + Terms.match(y.key, Terms.STRONG).size
             if (sy != sx) sy - sx else x.key.compareTo(y.key)
         })
-        appendLine("  ${endpoints.size} distinct; top 90:")
-        ranked.take(90).forEach { appendLine("  ${it.key}  [${it.value}]") }
+        appendLine("  ${endpoints.size} distinct; top 40:")
+        ranked.take(40).forEach { appendLine("  ${it.key}  [${it.value}]") }
         appendLine()
 
         appendLine("BINDER SERVICES (${sv?.relevant?.size} relevant of ${sv?.totalServices}) ${sv?.note ?: ""}")
@@ -336,14 +365,14 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         appendLine()
 
         appendLine("(page 3) CONFIG FILE NAMES (contents not read): ${vm.configNames.size}")
-        vm.configNames.take(60).forEach { appendLine("  $it") }
+        vm.configNames.filter { !it.contains("ar_parms") }.take(40).forEach { appendLine("  $it") }
         appendLine()
 
         appendLine("ZEEKR SDK IN FRAMEWORK JARS (package: classes):")
         scans.filter { it.vendorClassNames.isNotEmpty() }.forEach { d ->
             val pkgs = d.vendorClassNames.groupingBy { it.substringBeforeLast('.') }.eachCount()
             appendLine("  ${d.path}: ${d.totalClasses} classes, ${pkgs.size} vendor packages")
-            pkgs.entries.filter { it.key.startsWith("com.zeekr") }.sortedBy { it.key }.take(60).forEach { appendLine("    ${it.key}: ${it.value}") }
+            pkgs.entries.filter { it.key.startsWith("com.zeekr") }.sortedBy { it.key }.take(if (vm.srInspect.isEmpty()) 60 else 0).forEach { appendLine("    ${it.key}: ${it.value}") }
         }
         appendLine("Key SDK classes (methods listed, not called):")
         vm.apis.filter { a -> listOf("Dashboard", "ACCStatus", "Adas", "ADAS", "Pilot", "Perception", "Obstacle", "Scene").any { a.className.substringAfterLast('.').contains(it) } && a.className.startsWith("com.zeekr") }
@@ -359,7 +388,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.2")
+        put("app", "7X SR Probe 0.3")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {
@@ -398,6 +427,13 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         })
         put("namedConstants", JSONArray().apply { vm.namedConstants.forEach { put(JSONObject().put("class", it.declaringClass).put("name", it.name).put("value", it.value).put("readAs", JSONArray(it.readAs.map { k -> k.name }))) } })
         put("namedReads", JSONArray().apply { vm.namedReads.forEach { put(JSONObject().put("name", it.constant.name).put("value", it.constant.value).put("kind", it.kind.name).put("availability", it.availability.name).put("raw", it.raw ?: JSONObject.NULL)) } })
+        put("srInspect", JSONArray().apply {
+            vm.srInspect.forEach { r ->
+                put(JSONObject().put("source", r.source).put("path", r.path).put("note", r.note ?: JSONObject.NULL).put("manifest", JSONArray(r.manifest))
+                    .put("classes", JSONArray().apply { r.classes.forEach { c -> put(JSONObject().put("name", c.name).put("super", c.superName ?: JSONObject.NULL)
+                        .put("interfaces", JSONArray(c.interfaces)).put("fields", JSONArray(c.fields)).put("methods", JSONArray(c.methods))) } }))
+            }
+        })
         put("dexScans", JSONArray().apply {
             vm.dexScans.forEach { d ->
                 put(JSONObject().put("source", d.source).put("path", d.path).put("dexFiles", d.dexFiles).put("classes", d.totalClasses)

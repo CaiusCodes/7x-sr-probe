@@ -8,4 +8,11 @@ mkdir -p "$OUT/shadow" "$OUT/classes"
 javac -d "$OUT/shadow" $(find shadow -name '*.java')
 "${KOTLINC:-kotlinc}" -jvm-target 1.8 -classpath "$COMPILE_JAR" -d "$OUT/classes" \
     $(find ../../app/src/main/java -name '*.kt') $(find fake -name '*.kt') SmokeTest.kt 2>&1 | grep -v '^warning' || true
-java -cp "$OUT/shadow:$OUT/classes:$COMPILE_JAR:$STDLIB" SmokeTestKt "$@"
+# A dexed stand-in "SRObject" so the v0.3 member parser has a vendor class to read.
+EXTRA=()
+DX=${DX:-/usr/lib/android-sdk/build-tools/debian/dx}
+if [ $# -gt 0 ] && [ -x "$DX" ]; then
+    mkdir -p "$OUT/sr"; javac -source 8 -target 8 -d "$OUT/sr" $(find fake-sr -name '*.java') 2>/dev/null
+    "$DX" --dex --output="$OUT/sr.apk" "$OUT/sr" && EXTRA=("$OUT/sr.apk")
+fi
+java -cp "$OUT/shadow:$OUT/classes:$COMPILE_JAR:$STDLIB" SmokeTestKt "$@" "${EXTRA[@]}"
