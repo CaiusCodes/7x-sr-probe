@@ -236,6 +236,10 @@ TensorFlow Lite 2.16.1 (Apache-2.0) is bundled unmodified from Maven Central (ch
 A later version will run a car/person/truck detector on surround frames in memory; results are drawn on screen only.
 TensorFlow Lite makes no vehicle calls and the APK still has no network code (smoke-tested).
 
+v0.8.5: the surround preview runs Google's COCO SSD MobileNet (`assets/detect.tflite`, provenance in
+`assets/MODEL_README.md`) on each of the four views and draws boxes for car, truck, bus, motorcycle, bicycle and
+person. Frames and results stay in memory and on screen; nothing is stored or sent. Still parked only.
+
 ## C. What the app writes
 
 ## C. What the app writes (all local, none to the vehicle)

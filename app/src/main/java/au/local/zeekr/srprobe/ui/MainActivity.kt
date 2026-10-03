@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.8.4", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.8.5", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
         right.addView(button("Read SDK-named ADAS ids once (parked)") { optInNamed(false) })
         right.addView(button("Subscribe to SR-object feed (parked)") { optInSrFeed(false) })
         right.addView(button("Query vehicle data provider (parked)") { optInProvider() })
-        right.addView(button("Live surround preview (parked, nothing saved)") {
+        right.addView(button("Live surround preview + detection (parked, nothing saved)") {
             if (vm.reader.isParked() == false) toast("Gear does not read P. Preview only runs parked.")
             else startActivity(Intent(this, SurroundPreviewActivity::class.java))
         })

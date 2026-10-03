@@ -184,12 +184,32 @@ class SurroundPreviewActivity : Activity() {
                 val c = android.graphics.Canvas(bmp)
                 val paint = android.graphics.Paint().apply { color = Color.WHITE; textSize = sh / 12f; isFakeBoldText = true; setShadowLayer(4f, 0f, 0f, Color.BLACK) }
                 for (t in 0 until 4) c.drawText(LABELS[t], (t % cols) * sw + sw / 30f, (t / cols) * sh + sh / 9f, paint)
+                // v0.8.5: detection on each view (in memory, on screen only).
+                val det = detector ?: if (detectorError == null) runCatching { au.local.zeekr.srprobe.vision.SurroundDetector(this) }
+                    .onFailure { detectorError = ReadOnlyGuard.describe(it) }.getOrNull().also { detector = it } else null
+                if (det != null) {
+                    val t0 = SystemClock.elapsedRealtime()
+                    val box = android.graphics.Paint().apply { style = android.graphics.Paint.Style.STROKE; strokeWidth = sh / 140f }
+                    val tag = android.graphics.Paint().apply { textSize = sh / 18f; isFakeBoldText = true; setShadowLayer(4f, 0f, 0f, Color.BLACK) }
+                    var n = 0
+                    for (t in 0 until 4) {
+                        val ox = (t % cols) * sw; val oy = (t / cols) * sh
+                        for (h in det.detect(yb, ub, vb, yRow, uvRow, uvPix, 0, band + t * (tileH + band), tileH)) {
+                            val col = when (h.label) { "person", "bicycle" -> Color.YELLOW; "truck", "bus" -> Color.rgb(255, 120, 0); else -> Color.GREEN }
+                            box.color = col; tag.color = col
+                            c.drawRect(ox + h.left * sw, oy + h.top * sh, ox + h.right * sw, oy + h.bottom * sh, box)
+                            c.drawText("${h.label} ${(h.score * 100).toInt()}%", ox + h.left * sw, oy + h.top * sh - 4f, tag)
+                            n++
+                        }
+                    }
+                    detectNote = "$n found, ${SystemClock.elapsedRealtime() - t0} ms"
+                }
             }
             frames++
             val n = frames
             main.post {
                 bitmap = bmp; image.setImageBitmap(bmp)
-                status.text = "Surround preview (parked, nothing saved) · frame $n · front / rear / left / right"
+                status.text = "Surround preview (parked, nothing saved) · frame $n · detection: " + (detectorError?.let { "unavailable ($it)" } ?: detectNote)
             }
         } catch (t: Throwable) {
             main.post { status.text = "Frame error: ${ReadOnlyGuard.describe(t)}" }
@@ -210,11 +230,16 @@ class SurroundPreviewActivity : Activity() {
         if (s == null && d == null && r == null && t == null) return
         val work = Runnable {
             runCatching { s?.close() }; runCatching { d?.close() }; runCatching { r?.close() }
+            runCatching { detector?.close() }; detector = null
             lastClosed = SystemClock.elapsedRealtime()
             t?.quitSafely()
         }
         if (h != null) h.post(work) else work.run()
     }
+
+    @Volatile private var detector: au.local.zeekr.srprobe.vision.SurroundDetector? = null
+    @Volatile private var detectorError: String? = null
+    @Volatile private var detectNote = "starting"
 
     private var resumed = false
     @Volatile private var opening = false

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and signs the SR Probe debug APK WITHOUT Gradle or Google's SDK download host.
-# Used to produce dist/7x-sr-probe-v0.8.4-debug.apk in an environment where dl.google.com was blocked.
+# Used to produce dist/7x-sr-probe-v0.8.5-debug.apk in an environment where dl.google.com was blocked.
 # The normal route is Android Studio / Gradle (see docs/BUILD_AND_INSTALL.md); both build the same sources.
 #
 # Needs: JDK 17+, kotlinc 2.0.x, Debian/Ubuntu android-sdk-build-tools (aapt2, dx, zipalign, apksigner),
@@ -18,8 +18,8 @@ COMPILE_JAR=${COMPILE_JAR:?set COMPILE_JAR to an Android 12 framework jar}
 OUT=${OUT:-$ROOT/build-offline}
 KEYSTORE=${KEYSTORE:-$HOME/.android/debug.keystore}
 PKG=au.local.zeekr.srprobe
-VERSION_CODE=15
-VERSION_NAME=0.8.4
+VERSION_CODE=16
+VERSION_NAME=0.8.5
 
 # On-device detection runtime (third_party/tflite, Apache-2.0).
 TFLITE_JARS="$ROOT/third_party/tflite/tensorflow-lite-2.16.1.jar:$ROOT/third_party/tflite/tensorflow-lite-api-2.16.1.jar"
