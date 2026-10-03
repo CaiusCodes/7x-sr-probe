@@ -3,11 +3,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      The ONLY permission requested. It lets PackageManager list installed packages on Android 11+.
+      QUERY_ALL_PACKAGES: It lets PackageManager list installed packages on Android 11+.
       It grants visibility, not control. Deliberately absent: INTERNET (no upload), CAMERA (no Camera2
       in v0.1), location, microphone, contacts, any car.* or system/signature permission.
     -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <!-- v0.8.2 (owner approved): live surround preview on screen only, parked. Asked at run time when the
+         preview button is tapped. Frames stay in memory; nothing is recorded, saved or uploaded. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:label="@string/app_name"
@@ -27,6 +32,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.SurroundPreviewActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <!-- Serves exported report files to the share sheet only. Not exported; read-only; per-URI grants. -->
         <provider

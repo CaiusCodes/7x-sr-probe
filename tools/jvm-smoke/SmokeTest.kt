@@ -95,7 +95,8 @@ fun main(args: Array<String>) {
             au.local.zeekr.srprobe.platform.ProviderPaths.Provider("b.Other", "provider name=.Other authorities=x.y", emptyList(), listOf("secret"))), emptyList(), null)), "com.zeekr.vehicle.data")
         check(cands == listOf("content://com.zeekr.vehicle.data/car_info", "content://com.zeekr.vehicle.data/speed"), "provider candidates: $cands")
         val dexText = java.util.zip.ZipFile(args[0]).use { z -> String(z.getInputStream(z.getEntry("classes.dex")).readBytes(), Charsets.ISO_8859_1) }
-        check(!dexText.contains("openCamera") && !dexText.contains("createCaptureSession"), "camera list: APK never references openCamera or capture sessions")
+        check(!dexText.contains("MediaRecorder") && !dexText.contains("MediaCodec") && !dexText.contains("MediaMuxer"), "camera preview: APK never records or encodes video")
+        check(!dexText.contains("android.permission.INTERNET") && !dexText.contains("HttpURLConnection"), "no network code in the APK")
         check(dexText.contains("getCameraCharacteristics"), "camera list: characteristics read is present")
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")

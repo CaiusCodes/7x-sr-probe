@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.8.1", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.8.2", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -81,12 +81,16 @@ class MainActivity : Activity() {
         right.addView(button("Read SDK-named ADAS ids once (parked)") { optInNamed(false) })
         right.addView(button("Subscribe to SR-object feed (parked)") { optInSrFeed(false) })
         right.addView(button("Query vehicle data provider (parked)") { optInProvider() })
+        right.addView(button("Live surround preview (parked, nothing saved)") {
+            if (vm.reader.isParked() == false) toast("Gear does not read P. Preview only runs parked.")
+            else startActivity(Intent(this, SurroundPreviewActivity::class.java))
+        })
         right.addView(button("List cameras (no images, parked)") {
             confirm("List cameras?", "Asks Android which cameras this app can see and their sizes. No camera is opened " +
                 "and no picture or video is taken.") { toast("Listing…"); vm.listCameras { showText(exporter.cameraText()) } }
         })
         right.addView(text("Log", 18f, FG, bold = true).apply { setPadding(0, dp(16), 0, 0) })
-        logView = text("", 13f, DIM).apply { typeface = Typeface.MONOSPACE }
+        logView = text("", 13f, DIM).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true) }
         right.addView(logView)
         val rightScroll = ScrollView(this).apply { addView(right) }
 
@@ -196,7 +200,7 @@ class MainActivity : Activity() {
 
     private fun showText(text: String) {
         val tv = TextView(this).apply {
-            this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+            this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE; setTextIsSelectable(true)
             setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
         }
         AlertDialog.Builder(this, android.R.style.Theme_Material_NoActionBar_Fullscreen)
@@ -228,7 +232,7 @@ class MainActivity : Activity() {
     /** Full-screen live view of the SR feed; refreshes while open and unsubscribes on close. */
     private fun showSrFeed() {
         val tv = TextView(this).apply {
-            textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+            textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE; setTextIsSelectable(true)
             setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
         }
         val scroll = ScrollView(this).apply { addView(tv) }
@@ -287,7 +291,7 @@ class MainActivity : Activity() {
             val text = try { exporter.summary() } catch (t: Throwable) { "Summary failed: $t" }
             runOnUiThread {
                 val tv = TextView(this).apply {
-                    this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE
+                    this.text = text; textSize = 15f; setTextColor(FG); typeface = Typeface.MONOSPACE; setTextIsSelectable(true)
                     setPadding(dp(24), dp(16), dp(24), dp(16)); setBackgroundColor(BG)
                 }
                 val scroll = ScrollView(this).apply { addView(tv) }

@@ -214,8 +214,16 @@ Camera2 composite surround stream on a 7X). This step only **describes** cameras
 | `Context.checkSelfPermission(CAMERA)` | Reports whether the permission is held; nothing is requested. |
 | `File("/dev").list()` filtered to `video*` | Directory names only; no device node is opened. |
 
-Never used: `openCamera`, `CameraDevice`, capture sessions, `ImageReader`, EVS, permission requests. The app
-does not declare the CAMERA permission. Opening a stream would be a later, separately audited phase.
+v0.8.1 car result: camera 2 (external) offers YUV 1280x5140 = four stacked 1280x1280 surround views.
+
+**v0.8.2 live preview (owner approved on the decision card, 2026-10-03: "Yes, preview only").**
+`SurroundPreviewActivity` declares and asks for CAMERA at run time, opens the camera offering the tall stacked
+stream, and uses one `TEMPLATE_PREVIEW` repeating request into an in-memory `ImageReader`. Frames are converted
+to a half-resolution 2x2 grid bitmap and shown on screen (max ~8/s). Rules:
+- Parked only: refused if gear does not read P; checked every second while open; closes when gear leaves P.
+- Camera closes when the screen is left (onPause).
+- No recording, no saving, no encoding: no MediaRecorder, MediaCodec, file or network output (smoke-tested on the dex).
+- No capture-request settings beyond the standard preview template; no vehicle calls added.
 
 ## C. What the app writes
 

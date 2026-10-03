@@ -20,7 +20,7 @@ Do not change any setting while doing this.
 
 ## 1. Install and launch
 
-1. Install `7x-sr-probe-v0.8.1-debug.apk` with your usual App Lab method. Confirm the only permission listed is "query all packages" (or none).
+1. Install `7x-sr-probe-v0.8.2-debug.apk` with your usual App Lab method. Confirm the only permission listed is "query all packages" (or none).
 2. Launch **7X SR Probe**.
 3. Confirm the green **SAFETY MODE  READ ONLY ✓** banner is visible. If not, stop.
 
