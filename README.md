@@ -15,7 +15,7 @@ Read-only diagnostic app for an Australian-market Zeekr 7X. It answers one quest
 
 ## Download
 
-Get `7x-sr-probe-v0.8.6-debug.apk` from the [Releases](../../releases) page. SHA-256: `e1cef332ef6e8dc79482e8e1e04e784b8ebef75856345c9b4d60067bab9b5ff4`.
+Get `7x-sr-probe-v0.9.0-debug.apk` from the [Releases](../../releases) page. SHA-256: `9c40d6f5184b67f927c0d68c4d27ad8f4da81889bb56ed535306ebb8ce800693`.
 
 ## Credits
 

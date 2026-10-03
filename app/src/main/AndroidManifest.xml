@@ -34,6 +34,12 @@
         </activity>
 
         <activity
+            android:name=".ui.VisionActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+
+        <activity
             android:name=".ui.SurroundPreviewActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />

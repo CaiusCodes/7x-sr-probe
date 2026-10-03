@@ -113,6 +113,9 @@ fun main(args: Array<String>) {
         check(!dexText.contains("MediaRecorder") && !dexText.contains("MediaCodec") && !dexText.contains("MediaMuxer"), "camera preview: APK never records or encodes video")
         check(!dexText.contains("android.permission.INTERNET") && !dexText.contains("HttpURLConnection"), "no network code in the APK")
         check(dexText.contains("getCameraCharacteristics"), "camera list: characteristics read is present")
+        check(dexText.contains("setBlockNetworkLoads") && !dexText.contains("addJavascriptInterface"), "vision: WebView blocks network loads and has no JS bridge")
+        val page = java.util.zip.ZipFile(args[0]).use { z -> z.getEntry("assets/vision/index.html")?.let { String(z.getInputStream(it).readBytes()) } }
+        check(page != null && page.contains("THREE") && !Regex("(src|href)=[\"']https?://").containsMatchIn(page), "vision: page bundled with three.js and no external loads")
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")
         // v0.2: a dex image embedded in a larger file (as in a .vdex) is found and parsed.

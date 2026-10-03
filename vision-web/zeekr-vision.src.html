@@ -1,0 +1,965 @@
+<title>Zeekr Vision</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the 3D scene fills the screen; speed, limit and light status top-left, status top-right, prototype controls bottom. */
+:root {
+  --sky: #EEF0F2;
+  --ink: #1D2127;
+  --quiet: #6A717A;
+  --faint: #B6BCC4;
+  --card: rgba(255, 255, 255, 0.86);
+  --rule: #D3D8DE;
+  --accent: #3E7BFA;
+  --red: #D93F45;
+  --hud: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-zv="light"]) { --sky: #111417; --ink: #E7EAEE; --quiet: #8F97A1; --faint: #49515B; --card: rgba(27, 31, 36, 0.88); --rule: #2E343B; --accent: #6B98FF; color-scheme: dark; }
+}
+:root[data-theme="dark"]:not([data-zv="light"]), :root[data-zv="dark"] { --sky: #111417; --ink: #E7EAEE; --quiet: #8F97A1; --faint: #49515B; --card: rgba(27, 31, 36, 0.88); --rule: #2E343B; --accent: #6B98FF; color-scheme: dark; }
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body { background: var(--sky); color: var(--ink); font-family: var(--hud); overflow: hidden; -webkit-user-select: none; user-select: none; }
+#view { position: fixed; inset: 0; }
+#view canvas { display: block; width: 100%; height: 100%; }
+
+.hud { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 14px); left: 18px; display: grid; gap: 10px; justify-items: start; }
+.speed { display: flex; align-items: baseline; gap: 8px; cursor: pointer; touch-action: none; }
+.speed b { font-size: clamp(48px, 8vw, 88px); font-weight: 600; line-height: 0.9; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.speed span { font-size: 15px; color: var(--quiet); font-weight: 500; }
+.gears { display: flex; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; color: var(--faint); }
+.gears .on { color: var(--ink); }
+.signs { display: flex; gap: 10px; align-items: center; }
+.limit { width: 48px; height: 48px; border-radius: 50%; background: #fff; color: #15181C; border: 5px solid var(--red); display: grid; place-items: center; font-weight: 600; font-size: 19px; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+.tl { display: grid; gap: 4px; padding: 5px; border-radius: 12px; background: #2A2F36; transition: box-shadow 0.3s; }
+.tl i { width: 10px; height: 10px; border-radius: 50%; background: #4A5059; display: block; }
+.tl[data-s="RED"] i:nth-child(1) { background: #FF4D55; }
+.tl[data-s="AMBER"] i:nth-child(2) { background: #FFB12E; }
+.tl[data-s="GREEN"] i:nth-child(3) { background: #33C07A; }
+.tl.go { box-shadow: 0 0 0 4px rgba(51, 192, 122, 0.35); }
+
+.status { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 18px); right: 18px; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--quiet); }
+.status i { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); display: block; }
+
+.controls { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100vw - 32px); }
+.seg { display: flex; background: var(--card); border: 1px solid var(--rule); border-radius: 999px; padding: 3px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.seg button { font: 500 14px var(--hud); color: var(--quiet); background: none; border: 0; border-radius: 999px; padding: 7px 13px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--sky); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.debug { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 44px); right: 18px; font: 11px/1.6 var(--mono); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; white-space: pre; font-variant-numeric: tabular-nums; }
+#tags { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.tag { position: absolute; transform: translate(-50%, -100%); font: 10.5px/1.35 var(--mono); color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+.note { position: fixed; bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--quiet); text-align: center; width: max-content; max-width: calc(100vw - 32px); }
+.fail { position: fixed; left: 16px; right: 16px; top: 40%; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.45; color: var(--ink); }
+@media (max-width: 720px) {
+  .seg button { padding: 6px 10px; font-size: 13px; }
+  .note { bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); }
+}
+</style>
+
+<div id="view"></div>
+<div id="tags"></div>
+
+<div class="hud">
+  <div class="speed" id="speed" title="Long press for Debug mode"><b id="kmh">0</b><span>km/h</span></div>
+  <div class="gears" id="gears"><span>P</span><span>R</span><span>N</span><span class="on">D</span></div>
+  <div class="signs">
+    <div class="limit" id="limit">50</div>
+    <div class="tl" id="tl" hidden><i></i><i></i><i></i></div>
+  </div>
+</div>
+<div class="status"><i></i>Mock data</div>
+<div class="debug" id="debug" hidden></div>
+<div class="fail" id="fail" hidden></div>
+<div class="note" id="note">Simulated traffic. Tap anywhere once to allow the green-light chime. Long press the speed for Debug.</div>
+
+<div class="controls">
+  <div class="seg" role="group" aria-label="Scenario">
+    <button id="sc-city" aria-pressed="true">City</button>
+    <button id="sc-park" aria-pressed="false">Car park</button>
+    <button id="sc-hwy" aria-pressed="false">Highway</button>
+  </div>
+  <div class="seg" role="group" aria-label="View">
+    <button id="vw-wide" aria-pressed="true">Wide</button>
+    <button id="vw-close" aria-pressed="false">Close</button>
+  </div>
+  <div class="seg" role="group" aria-label="Options">
+    <button id="tg-path" aria-pressed="true">Path</button>
+    <button id="tg-sound" aria-pressed="true">Chime</button>
+    <button id="tg-theme" aria-pressed="false">Theme: Auto</button>
+    <button id="tg-debug" aria-pressed="false">Debug</button>
+  </div>
+</div>
+
+<script>
+window.__zvFail = msg => { const el = document.getElementById('fail'); if (!el || !el.hidden) return; el.textContent = 'The 3D view could not start: ' + msg; el.hidden = false; };
+window.addEventListener('error', e => window.__zvFail(e.message || 'script error'));
+</script>
+<script>/*THREE_INLINE*/</script>
+<script>
+(() => {
+'use strict';
+// ---------- constants ----------
+const EGO_L = 4.83, EGO_W = 1.93, EGO_H = 1.66, REAR_OVERHANG = 0.9, WHEELBASE = 2.925;
+const EGO_CX = EGO_L / 2 - REAR_OVERHANG;          // ego centre, metres ahead of the rear axle
+const FRAME_HZ = 8, DELAY = 0.15;                    // perception rate; render this far behind
+const LIGHT_RGB = { RED: 0xFF4D55, AMBER: 0xFFB12E, GREEN: 0x33C07A };
+const SIZE = {
+  CAR: [4.6, 1.85, 1.46], SUV: [4.8, 1.92, 1.7], VAN: [5.2, 2.0, 2.2], TRUCK: [8.6, 2.5, 3.4],
+  BUS: [12, 2.55, 3.2], MOTORCYCLE: [2.1, 0.8, 1.45], BICYCLE: [1.8, 0.6, 1.75],
+  PEDESTRIAN: [0.5, 0.5, 1.72], ANIMAL: [0.95, 0.32, 0.62],
+};
+const PALETTE = {
+  light: {
+    sky: 0xEEF0F2, ground: 0xE7E9EC, road: 0xDCDFE3, line: 0xBCC2C9, edge: 0xA6ADB5,
+    body: 0xAEB4BC, glass: 0x8E97A2, trim: 0x6A717A, tyre: 0x464B52, rim: 0xA9B0B8, ped: 0x87909A, cargo: 0xC2C7CD,
+    egoBody: 0xFBFCFD, egoGlass: 0x2D333B, egoTrim: 0x2E333A, egoLine: 0xA2A9B2, head: 0x59606A, lampOff: 0x7C838C,
+    tailOff: 0x9C3A40, indOff: 0x9A8B6E, shadow: 0.5, hemi: [0xffffff, 0xc4c9d0, 0.78], sun: 0.42, path: [0x3E7BFA, 0.34],
+  },
+  dark: {
+    sky: 0x111417, ground: 0x15191D, road: 0x1D2227, line: 0x3E4650, edge: 0x535C67,
+    body: 0x606A75, glass: 0x2C3238, trim: 0x23272C, tyre: 0x1A1D21, rim: 0x7E8790, ped: 0xA4ADB7, cargo: 0x6E7782,
+    egoBody: 0xEFF2F5, egoGlass: 0x1E2328, egoTrim: 0x1F2328, egoLine: 0x6B737D, head: 0x343A42, lampOff: 0x3E444C,
+    tailOff: 0x6A2226, indOff: 0x5A4E36, shadow: 0.75, hemi: [0xc6d0dc, 0x0e1216, 0.82], sun: 0.42, path: [0x6B98FF, 0.42],
+  },
+};
+let P = PALETTE.light;
+
+// ---------- renderer ----------
+if (typeof THREE === 'undefined') { window.__zvFail('the 3D library did not load.'); return; }
+const view = document.getElementById('view');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+catch (e) {
+  try { renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' }); }
+  catch (e2) { window.__zvFail('this browser has 3D graphics (WebGL) turned off. Try opening the link in Chrome or Brave.'); return; }
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(P.sky, 55, 170);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 400);
+const hemi = new THREE.HemisphereLight(0xffffff, 0xc4c9d0, 0.9); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 0.5); sun.position.set(-5, 12, 9); scene.add(sun);
+
+// every material carries a palette role so the theme can recolour it
+const role = (m, r) => { m.userData.role = r; return m; };
+const lambert = r => role(new THREE.MeshLambertMaterial({ color: P[r] }), r);
+const basic = r => role(new THREE.MeshBasicMaterial({ color: P[r] }), r);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), basic('ground'));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.04;
+scene.add(ground);
+
+// vehicle frame (x fwd, y left, z up) -> three.js (x right, y up, z back)
+const place = (obj, x, y, z = 0) => obj.position.set(-y, z, -x);
+
+// ---------- textures ----------
+function radialTexture(inner, outer) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gr.addColorStop(0, inner); gr.addColorStop(1, outer);
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+const shadowTex = radialTexture('rgba(20,24,30,0.65)', 'rgba(20,24,30,0)');
+const glowTex = radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
+
+// ---------- geometry helpers ----------
+const geoCache = new Map();
+const cached = (key, make) => { if (!geoCache.has(key)) geoCache.set(key, make()); return geoCache.get(key); };
+function extrudeShape(shape, width, bevel, segs) {
+  const d = Math.max(0.01, width - 2 * bevel);
+  const g = new THREE.ExtrudeGeometry(shape, { depth: d, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: segs, steps: 1, curveSegments: 10 });
+  g.translate(0, 0, -d / 2);
+  return g;
+}
+function shapeFrom(cmds) {
+  const s = new THREE.Shape();
+  for (const c of cmds) {
+    if (c[0] === 'M') s.moveTo(c[1], c[2]);
+    else if (c[0] === 'L') s.lineTo(c[1], c[2]);
+    else if (c[0] === 'Q') s.quadraticCurveTo(c[1], c[2], c[3], c[4]);
+  }
+  return s;
+}
+const mesh = (g, m) => new THREE.Mesh(g, m);
+function box(l, h, w, m) { return mesh(cached(`box${l},${h},${w}`, () => new THREE.BoxGeometry(l, h, w)), m); }
+function blob(L, W, strength = 1) {
+  const m = new THREE.Mesh(cached('plane1', () => new THREE.PlaneGeometry(1, 1)), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: P.shadow * strength }));
+  m.material.userData.shadowK = strength;
+  m.rotation.x = -Math.PI / 2; m.scale.set(W + 1.0, L + 1.0, 1); m.position.y = 0.045; m.renderOrder = 1;
+  m.userData.shadow = true;
+  return m;
+}
+function glow(color, size) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, depthWrite: false, opacity: 0.7 }));
+  s.scale.set(size, size, 1); s.userData.glow = true; return s;
+}
+// A side group: parts are placed as (u along the length from the rear bumper, v up, w lateral; +w is the vehicle's right).
+// Rotating it by +90 degrees about y makes u point forward (-z in three.js).
+function sideGroup() { const g = new THREE.Group(); g.rotation.y = Math.PI / 2; return g; }
+function wheelSet(s, us, W, r, tyreW, o) {
+  const tg = cached(`tyre${r},${tyreW}`, () => { const g = new THREE.CylinderGeometry(r, r, tyreW, 24); g.rotateX(Math.PI / 2); return g; });
+  const rg = cached(`rim${r}`, () => { const g = new THREE.CylinderGeometry(r * 0.66, r * 0.66, 0.02, 20); g.rotateX(Math.PI / 2); return g; });
+  const tm = lambert('tyre'), rm = lambert('rim');
+  for (const u of us) for (const side of [-1, 1]) {
+    const t = mesh(tg, tm); t.position.set(u + o, r, side * (W / 2 - tyreW / 2 - 0.04)); s.add(t);
+    const rim = mesh(rg, rm); rim.position.set(u + o, r, side * (W / 2 - 0.03)); s.add(rim);
+  }
+}
+
+// ---------- car body (shared by the ego Zeekr 7X and generic cars) ----------
+// Side profile with real wheel arches; proportions follow the 7X for the ego.
+function bodyShape(L, H, uR, uF, R) {
+  const b = 0.36, s = new THREE.Shape();
+  s.moveTo(0.16, b + 0.02);
+  s.lineTo(uR - R, b);
+  s.absarc(uR, b - 0.03, R, Math.PI, 0, true);
+  s.lineTo(uF - R, b);
+  s.absarc(uF, b - 0.03, R, Math.PI, 0, true);
+  s.lineTo(L - 0.22, b);
+  s.quadraticCurveTo(L, b, L, b + 0.24);
+  s.lineTo(L - 0.02, 0.47 * H);
+  s.quadraticCurveTo(L - 0.04, 0.56 * H, L - 0.34, 0.575 * H);
+  s.lineTo(0.73 * L, 0.625 * H);
+  s.lineTo(0.08 * L, 0.65 * H);
+  s.quadraticCurveTo(0.012 * L, 0.65 * H, 0.006 * L, 0.52 * H);
+  s.lineTo(0, b + 0.2);
+  s.quadraticCurveTo(0, b + 0.02, 0.16, b + 0.02);
+  return s;
+}
+function glassShape(L, H, style) {
+  if (style === 'sedan') return shapeFrom([['M', 0.735 * L, 0.6 * H], ['Q', 0.66 * L, 0.8 * H, 0.58 * L, 0.955 * H], ['Q', 0.55 * L, 0.985 * H, 0.5 * L, 0.99 * H], ['L', 0.36 * L, 0.985 * H], ['Q', 0.3 * L, 0.975 * H, 0.21 * L, 0.66 * H], ['L', 0.2 * L, 0.6 * H]]);
+  return shapeFrom([['M', 0.738 * L, 0.6 * H], ['Q', 0.64 * L, 0.78 * H, 0.545 * L, 0.955 * H], ['Q', 0.505 * L, 0.99 * H, 0.44 * L, 0.993 * H], ['L', 0.22 * L, 0.99 * H], ['Q', 0.155 * L, 0.985 * H, 0.11 * L, 0.82 * H], ['L', 0.07 * L, 0.635 * H], ['L', 0.09 * L, 0.6 * H]]);
+}
+function roofShape(L, H, style) {
+  if (style === 'sedan') return shapeFrom([['M', 0.565 * L, 0.955 * H], ['Q', 0.54 * L, 1.0 * H, 0.49 * L, 1.004 * H], ['L', 0.37 * L, 1.0 * H], ['Q', 0.33 * L, 0.995 * H, 0.31 * L, 0.94 * H], ['L', 0.36 * L, 0.97 * H], ['L', 0.5 * L, 0.975 * H]]);
+  return shapeFrom([['M', 0.535 * L, 0.955 * H], ['Q', 0.5 * L, 1.004 * H, 0.43 * L, 1.008 * H], ['L', 0.22 * L, 1.004 * H], ['Q', 0.17 * L, 1.0 * H, 0.135 * L, 0.93 * H], ['L', 0.2 * L, 0.975 * H], ['L', 0.45 * L, 0.98 * H]]);
+}
+// Lamps: tail (brake), front running light, and four indicators. Stored for setLamps().
+function addLamps(root, s, L, W, H, o, fullWidth) {
+  const tailM = role(new THREE.MeshBasicMaterial({ color: P.tailOff }), 'tailOff');
+  const indM = () => role(new THREE.MeshBasicMaterial({ color: P.indOff }), 'indOff');
+  const tails = [];
+  const tailV = 0.62 * H;
+  if (fullWidth) { const t = box(0.05, 0.055, W - 0.24, tailM); t.position.set(o + 0.01, tailV, 0); s.add(t); tails.push(t); }
+  else for (const side of [-1, 1]) { const t = box(0.05, 0.08, 0.36, tailM); t.position.set(o + 0.02, tailV - 0.02, side * (W / 2 - 0.28)); s.add(t); tails.push(t); }
+  const drl = box(0.04, 0.035, fullWidth ? W - 0.3 : W - 0.6, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  drl.position.set(L + o - 0.015, 0.55 * H, 0); s.add(drl);
+  const ind = { L: [], R: [] };
+  for (const [key, side] of [['L', -1], ['R', 1]]) {
+    const f = box(0.05, 0.05, 0.16, indM()); f.position.set(L + o - 0.03, 0.53 * H, side * (W / 2 - 0.16)); s.add(f); ind[key].push(f);
+    const r = box(0.05, 0.06, 0.14, indM()); r.position.set(o + 0.015, tailV - 0.075, side * (W / 2 - 0.15)); s.add(r); ind[key].push(r);
+  }
+  const brakeGlow = [];
+  for (const side of [-1, 1]) { const g = glow(0xff3340, 1.1); g.position.set(o - 0.15, tailV, side * (W / 2 - 0.3)); g.visible = false; s.add(g); brakeGlow.push(g); }
+  const indGlow = { L: [], R: [] };
+  for (const [key, side] of [['L', -1], ['R', 1]]) for (const u of [o - 0.12, L + o + 0.12]) {
+    const g = glow(0xffa21a, 0.8); g.position.set(u, 0.55 * H, side * (W / 2 - 0.12)); g.visible = false; s.add(g); indGlow[key].push(g);
+  }
+  root.userData.lamps = { tails, ind, brakeGlow, indGlow };
+}
+function setLamps(grp, brake, left, right, blinkOn) {
+  const l = grp.userData.lamps; if (!l) return;
+  for (const t of l.tails) t.material.color.setHex(brake ? 0xFF2E3A : P.tailOff);
+  for (const g of l.brakeGlow) g.visible = brake;
+  for (const [key, on] of [['L', left && blinkOn], ['R', right && blinkOn]]) {
+    for (const m of l.ind[key]) m.material.color.setHex(on ? 0xFFA21A : P.indOff);
+    for (const g of l.indGlow[key]) g.visible = on;
+  }
+}
+
+function carModel(L, W, H, opts) {
+  const ego = !!opts.ego, style = opts.style || 'suv';
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2;
+  const uR = ego ? REAR_OVERHANG : 0.2 * L, uF = ego ? REAR_OVERHANG + WHEELBASE : 0.79 * L;
+  const r = ego ? 0.375 : 0.34, R = r + 0.13;
+  const key = `${ego ? 'ego' : style}${L},${W},${H}`;
+  const bodyG = cached('b' + key, () => { const g = extrudeShape(bodyShape(L, H, uR, uF, R), W, ego ? 0.09 : 0.07, ego ? 4 : 2); g.translate(o, 0, 0); return g; });
+  const glassG = cached('g' + key, () => { const g = extrudeShape(glassShape(L, H, style), W - 0.2, 0.07, ego ? 3 : 2); g.translate(o, 0, 0); return g; });
+  const roofG = cached('r' + key, () => { const g = extrudeShape(roofShape(L, H, style), W - 0.26, 0.035, 2); g.translate(o, 0.045, 0); return g; });
+  const body = lambert(ego ? 'egoBody' : 'body');
+  s.add(mesh(bodyG, body), mesh(glassG, lambert(ego ? 'egoGlass' : 'glass')), mesh(roofG, body));
+  // dark lower cladding: sills and bumper lips, plus arch trims
+  const trim = lambert(ego ? 'egoTrim' : 'trim');
+  const sill = box(uF - uR - 2 * R + 0.1, 0.12, W + 0.01, trim); sill.position.set((uR + uF) / 2 + o, 0.33, 0); s.add(sill);
+  const lipF = box(0.5, 0.1, W - 0.1, trim); lipF.position.set(L - 0.28 + o, 0.31, 0); s.add(lipF);
+  const lipR = box(0.4, 0.1, W - 0.1, trim); lipR.position.set(0.22 + o, 0.33, 0); s.add(lipR);
+  const archG = cached(`arch${R}`, () => new THREE.TorusGeometry(R + 0.01, 0.045, 6, 18, Math.PI));
+  for (const u of [uR, uF]) for (const side of [-1, 1]) { const a = mesh(archG, trim); a.position.set(u + o, 0.33, side * (W / 2 - 0.02)); s.add(a); }
+  wheelSet(s, [uR, uF], W, r, 0.26, o);
+  if (ego) {
+    const lineMat = role(new THREE.LineBasicMaterial({ color: P.egoLine }), 'egoLine');
+    s.add(new THREE.LineSegments(cached('e' + key, () => new THREE.EdgesGeometry(bodyG, 32)), lineMat));
+    for (const side of [-1, 1]) { const m = box(0.16, 0.1, 0.14, body); m.position.set(0.71 * L + o, 0.66 * H, side * (W / 2 + 0.06)); s.add(m); }
+  }
+  addLamps(root, s, L, W, H, o, ego);
+  root.add(s, blob(L, W, ego ? 1.15 : 1));
+  return root;
+}
+function vanModel(L, W, H) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2;
+  const g = cached(`van${L}`, () => { const x = extrudeShape(shapeFrom([['M', 0.05, 0.32], ['L', L - 0.2, 0.32], ['Q', L, 0.32, L, 0.6], ['L', L - 0.04, 0.95], ['Q', L - 0.1, 1.08, L - 0.7, 1.36], ['L', L - 1.05, H - 0.06], ['Q', L - 1.12, H, L - 1.3, H], ['L', 0.1, H], ['Q', 0, H, 0, H - 0.12], ['L', 0, 0.42]]), W, 0.08, 2); x.translate(o, 0, 0); return x; });
+  s.add(mesh(g, lambert('body')));
+  const gl = cached(`vang${L}`, () => { const x = extrudeShape(shapeFrom([['M', L - 0.12, 1.0], ['L', L - 0.72, 1.4], ['L', L - 1.0, H - 0.17], ['L', L - 1.75, H - 0.17], ['L', L - 1.75, 1.0]]), W + 0.02, 0.02, 1); x.translate(o, 0, 0); return x; });
+  s.add(mesh(gl, lambert('glass')));
+  wheelSet(s, [0.9, L - 1.0], W, 0.37, 0.25, o);
+  addLamps(root, s, L, W, H * 0.62, o, false);
+  root.add(s, blob(L, W)); return root;
+}
+function truckModel(L, W, H) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2, c0 = L - 2.3;
+  const cab = cached(`cab${L}`, () => { const x = extrudeShape(shapeFrom([['M', c0, 0.5], ['L', L - 0.1, 0.5], ['Q', L, 0.5, L, 0.8], ['L', L - 0.04, 2.5], ['Q', L - 0.1, 3.0, L - 0.5, 3.0], ['L', c0, 3.0]]), W, 0.08, 2); x.translate(o, 0, 0); return x; });
+  s.add(mesh(cab, lambert('body')));
+  const gl = cached(`cabg${L}`, () => { const x = extrudeShape(shapeFrom([['M', L - 0.04, 1.8], ['L', L - 0.06, 2.48], ['Q', L - 0.12, 2.9, L - 0.5, 2.92], ['L', c0 + 0.9, 2.92], ['L', c0 + 0.9, 1.8]]), W + 0.02, 0.01, 1); x.translate(o, 0, 0); return x; });
+  s.add(mesh(gl, lambert('glass')));
+  const cargo = box(c0 - 0.35, H - 1.05, W, lambert('cargo')); cargo.position.set((c0 - 0.35) / 2 + 0.1 + o, 1.05 + (H - 1.05) / 2, 0); s.add(cargo);
+  const rail = box(L - 0.4, 0.25, W - 0.5, lambert('trim')); rail.position.set(L / 2 + o, 0.75, 0); s.add(rail);
+  wheelSet(s, [1.1, 2.4, L - 1.35], W, 0.5, 0.32, o);
+  addLamps(root, s, L, W, 1.6, o, false);
+  root.add(s, blob(L, W, 0.9)); return root;
+}
+function busModel(L, W, H) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2;
+  const g = cached(`bus${L}`, () => { const x = extrudeShape(shapeFrom([['M', 0.1, 0.35], ['L', L - 0.15, 0.35], ['Q', L, 0.35, L, 0.6], ['L', L, H - 0.3], ['Q', L, H, L - 0.35, H], ['L', 0.25, H], ['Q', 0, H, 0, H - 0.25], ['L', 0, 0.5]]), W, 0.09, 2); x.translate(o, 0, 0); return x; });
+  s.add(mesh(g, lambert('body')));
+  const band = box(L - 0.8, 0.95, W + 0.02, lambert('glass')); band.position.set(L / 2 + o - 0.1, 1.98, 0); s.add(band);
+  const screen = box(0.03, 1.5, W - 0.3, lambert('glass')); screen.position.set(L + o + 0.08, 1.8, 0); s.add(screen);
+  wheelSet(s, [2.6, L - 2.7], W, 0.5, 0.32, o);
+  addLamps(root, s, L, W, 1.5, o, false);
+  root.add(s, blob(L, W, 0.9)); return root;
+}
+function personParts(mat, root, legH = 0.86) {
+  const legs = [], arms = [];
+  for (const side of [-1, 1]) {
+    const hip = new THREE.Group(); hip.position.set(side * 0.095, legH, 0);
+    const leg = mesh(cached('leg', () => new THREE.CylinderGeometry(0.075, 0.055, 0.84, 8)), mat); leg.position.y = -0.42;
+    hip.add(leg); root.add(hip); legs.push(hip);
+    const sh = new THREE.Group(); sh.position.set(side * 0.24, legH + 0.56, 0);
+    const arm = mesh(cached('arm', () => new THREE.CylinderGeometry(0.05, 0.04, 0.58, 8)), mat); arm.position.y = -0.29;
+    sh.add(arm); root.add(sh); arms.push(sh);
+  }
+  const torso = mesh(cached('torso', () => new THREE.CylinderGeometry(0.2, 0.15, 0.62, 14)), mat); torso.position.y = legH + 0.31; root.add(torso);
+  const shoulders = mesh(cached('shoulders', () => new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2)), mat); shoulders.position.y = legH + 0.62; shoulders.scale.set(1.15, 0.5, 0.85); root.add(shoulders);
+  const head = mesh(cached('head', () => new THREE.SphereGeometry(0.115, 16, 12)), mat); head.position.y = legH + 0.8; root.add(head);
+  return { legs, arms };
+}
+function pedestrianModel() {
+  const root = new THREE.Group();
+  const { legs, arms } = personParts(lambert('ped'), root);
+  root.userData.legs = legs; root.userData.arms = arms;
+  root.add(blob(0.5, 0.5, 0.7)); return root;
+}
+function riderInto(s, u, seatV, lean, mat) {
+  const torso = mesh(cached('rtorso', () => new THREE.CylinderGeometry(0.15, 0.18, 0.62, 10)), mat);
+  torso.position.set(u, seatV + 0.3, 0); torso.rotation.z = -lean; s.add(torso);
+  const head = mesh(cached('head', () => new THREE.SphereGeometry(0.115, 16, 12)), mat);
+  head.position.set(u + Math.sin(lean) * 0.44, seatV + 0.72, 0); s.add(head);
+}
+function motorcycleModel(L) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2;
+  const g = cached('moto', () => { const x = extrudeShape(shapeFrom([['M', 0.35, 0.45], ['L', 1.6, 0.45], ['Q', 1.75, 0.6, 1.7, 0.88], ['L', 1.3, 1.0], ['L', 0.45, 0.9], ['Q', 0.3, 0.8, 0.35, 0.45]]), 0.36, 0.05, 2); x.translate(o, 0, 0); return x; });
+  s.add(mesh(g, lambert('body')));
+  const tg = cached('mwheel', () => { const x = new THREE.CylinderGeometry(0.32, 0.32, 0.12, 20); x.rotateX(Math.PI / 2); return x; });
+  for (const u of [0.35, 1.75]) { const w = mesh(tg, lambert('tyre')); w.position.set(u + o, 0.32, 0); s.add(w); }
+  riderInto(s, 0.78 + o, 0.85, 0.35, lambert('ped'));
+  root.add(s, blob(L, 0.7, 0.8)); return root;
+}
+function bicycleModel(L) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2, t = lambert('trim');
+  const wg = cached('bwheel', () => new THREE.TorusGeometry(0.34, 0.035, 6, 24));
+  for (const u of [0.38, 1.42]) { const w = mesh(wg, t); w.position.set(u + o, 0.34, 0); s.add(w); }
+  const frame = box(1.04, 0.05, 0.05, t); frame.position.set(0.9 + o, 0.62, 0); frame.rotation.z = 0.12; s.add(frame);
+  riderInto(s, 0.7 + o, 0.98, 0.3, lambert('ped'));
+  root.add(s, blob(L, 0.6, 0.7)); return root;
+}
+function animalModel(L) {
+  const root = new THREE.Group(), s = sideGroup(), o = -L / 2, m = lambert('ped');
+  const body = mesh(cached('dogb', () => new THREE.CylinderGeometry(0.13, 0.14, 0.62, 10)), m); body.rotation.z = Math.PI / 2; body.position.set(0.48 + o, 0.42, 0); s.add(body);
+  const head = mesh(cached('dogh', () => new THREE.SphereGeometry(0.11, 12, 10)), m); head.position.set(0.86 + o, 0.56, 0); s.add(head);
+  for (const u of [0.25, 0.7]) for (const side of [-1, 1]) { const l = box(0.06, 0.32, 0.06, m); l.position.set(u + o, 0.16, side * 0.08); s.add(l); }
+  const tail = box(0.22, 0.04, 0.04, m); tail.position.set(0.1 + o, 0.5, 0); tail.rotation.z = -0.6; s.add(tail);
+  root.add(s, blob(L, 0.4, 0.7)); return root;
+}
+function lightModel() {
+  const root = new THREE.Group(), dark = lambert('head');
+  const pole = mesh(cached('pole', () => new THREE.CylinderGeometry(0.06, 0.07, 3.0, 10)), dark); pole.position.y = 1.5; root.add(pole);
+  const head = box(0.42, 1.18, 0.32, dark); head.position.y = 3.45; root.add(head);
+  const lamps = {};
+  [['RED', 0.37], ['AMBER', 0], ['GREEN', -0.37]].forEach(([k, dy]) => {
+    const m = mesh(cached('lamp', () => new THREE.CircleGeometry(0.13, 20)), role(new THREE.MeshBasicMaterial({ color: P.lampOff }), 'lampOff'));
+    m.position.set(0, 3.45 + dy, 0.165); root.add(m); lamps[k] = m;
+  });
+  const g = glow(0xffffff, 1.4); g.visible = true; root.add(g);
+  root.userData = { lamps, glow: g };
+  return root;
+}
+function makeModel(o) {
+  switch (o.kind) {
+    case 'CAR': return carModel(o.length, o.width, o.height, { style: o.height > 1.6 ? 'suv' : 'sedan' });
+    case 'VAN': return vanModel(o.length, o.width, o.height);
+    case 'TRUCK': return truckModel(o.length, o.width, o.height);
+    case 'BUS': return busModel(o.length, o.width, o.height);
+    case 'MOTORCYCLE': return motorcycleModel(o.length);
+    case 'BICYCLE': return bicycleModel(o.length);
+    case 'PEDESTRIAN': return pedestrianModel();
+    case 'ANIMAL': return animalModel(o.length);
+  }
+}
+
+// ---------- ego: white Zeekr 7X ----------
+const ego = carModel(EGO_L, EGO_W, EGO_H, { ego: true });
+place(ego, EGO_CX, 0);
+scene.add(ego);
+
+// ---------- path ribbon ----------
+const pathMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { uColor: { value: new THREE.Color(P.path[0]) }, uA: { value: P.path[1] } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 uColor; uniform float uA; varying vec2 vUv; void main(){ float e = smoothstep(0.0, 0.22, vUv.x) * smoothstep(1.0, 0.78, vUv.x); float f = smoothstep(0.0, 0.06, vUv.y) * (1.0 - smoothstep(0.45, 1.0, vUv.y)); gl_FragColor = vec4(uColor, uA * e * f); }',
+});
+const pathMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1), pathMat);
+pathMesh.rotation.x = -Math.PI / 2; pathMesh.renderOrder = 2;
+scene.add(pathMesh);
+
+// ---------- road furniture ----------
+const roadGroup = new THREE.Group(); scene.add(roadGroup);
+const flat = (w, l, r, y) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l), basic(r)); m.rotation.x = -Math.PI / 2; m.position.y = y; return m; };
+let roadParts = null;
+function buildRoad(def) {
+  roadGroup.clear();
+  roadParts = { dashed: [], bays: [], junction: null };
+  const surf = flat(def.surface[1] - def.surface[0], 600, 'road', 0);
+  surf.position.x = -(def.surface[0] + def.surface[1]) / 2; roadGroup.add(surf);
+  for (const ln of def.lines) {
+    if (ln.solid) { const m = flat(ln.w || 0.14, 600, ln.edge ? 'edge' : 'line', 0.03); m.position.x = -ln.y; roadGroup.add(m); }
+    else {
+      const period = ln.dash + ln.gap, n = Math.ceil(210 / period) + 1, dashes = [];
+      for (let i = 0; i < n; i++) { const m = flat(ln.w || 0.14, ln.dash, 'line', 0.03); m.position.x = -ln.y; roadGroup.add(m); dashes.push(m); }
+      roadParts.dashed.push({ ln, period, dashes });
+    }
+  }
+  for (const b of def.bays || []) {
+    const n = Math.ceil(210 / b.spacing) + 1, marks = [];
+    for (let i = 0; i < n; i++) { const m = flat(b.len, 0.12, 'line', 0.03); m.position.x = -b.y; roadGroup.add(m); marks.push(m); }
+    roadParts.bays.push({ b, marks });
+  }
+  if (def.junctions) {
+    const j = new THREE.Group();
+    const cross = flat(320, 14, 'road', 0.012); cross.position.z = -7; j.add(cross);
+    const stop = flat(def.stopSpan[1] - def.stopSpan[0], 0.45, 'edge', 0.035); stop.position.set(-(def.stopSpan[0] + def.stopSpan[1]) / 2, 0.035, 0.4); j.add(stop);
+    roadGroup.add(j); roadParts.junction = j;
+  }
+}
+function updateRoad(odo, junctionX, lat) {
+  roadGroup.position.x = lat;     // the road shifts sideways when the Zeekr changes lane
+  for (const d of roadParts.dashed) {
+    const first = Math.floor((odo - 50) / d.period);
+    d.dashes.forEach((m, i) => { m.position.z = -((first + i) * d.period + d.ln.dash / 2 - odo); });
+  }
+  for (const b of roadParts.bays) {
+    const first = Math.floor((odo - 50) / b.b.spacing);
+    b.marks.forEach((m, i) => { m.position.z = -((first + i) * b.b.spacing - odo); });
+  }
+  if (roadParts.junction) {
+    roadParts.junction.visible = junctionX != null;
+    if (junctionX != null) roadParts.junction.position.z = -junctionX;
+  }
+}
+
+// ---------- theme ----------
+let themeMode = 'auto';
+try { themeMode = localStorage.getItem('zv-theme') || 'auto'; } catch (e) {}
+const mq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+function effectiveTheme() {
+  if (themeMode !== 'auto') return themeMode;
+  const host = document.documentElement.getAttribute('data-theme');
+  if (host === 'dark' || host === 'light') return host;
+  return mq && mq.matches ? 'dark' : 'light';
+}
+function applyTheme() {
+  const t = effectiveTheme();
+  if (themeMode === 'auto') document.documentElement.removeAttribute('data-zv'); else document.documentElement.setAttribute('data-zv', themeMode);
+  P = PALETTE[t];
+  renderer.setClearColor(P.sky); scene.fog.color.setHex(P.sky);
+  hemi.color.setHex(P.hemi[0]); hemi.groundColor.setHex(P.hemi[1]); hemi.intensity = P.hemi[2]; sun.intensity = P.sun;
+  pathMat.uniforms.uColor.value.setHex(P.path[0]); pathMat.uniforms.uA.value = P.path[1];
+  scene.traverse(o => {
+    const m = o.material; if (!m) return;
+    if (m.userData.role && P[m.userData.role] != null) m.color.setHex(P[m.userData.role]);
+    if (m.userData.shadowK != null) { m.userData.base = P.shadow * m.userData.shadowK; m.opacity = m.userData.base; }
+  });
+  const btn = document.getElementById('tg-theme');
+  btn.textContent = 'Theme: ' + themeMode[0].toUpperCase() + themeMode.slice(1);
+}
+if (mq && mq.addEventListener) mq.addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------- mock perception (stands in for the real camera pipeline) ----------
+// Everything below only produces SceneFrames; the renderer never reads the simulation directly.
+let rnd = 1;
+const rand = () => ((rnd = (rnd * 16807) % 2147483647) / 2147483647);
+const gauss = () => (rand() + rand() + rand() - 1.5) * 0.8;
+
+const SCENARIOS = {
+  city: {
+    limit: 50, vmax: 50 / 3.6, gear: 'D',
+    road: {
+      surface: [-11.8, 3.6], stopSpan: [-5.0, 1.7],
+      lines: [{ y: -1.7, dash: 3, gap: 7 }, { y: -5.0, solid: true, w: 0.16 }, { y: -8.35, dash: 3, gap: 7 }, { y: 3.6, solid: true, edge: true, w: 0.2 }, { y: -11.8, solid: true, edge: true, w: 0.2 }, { y: 1.75, solid: true, w: 0.12 }],
+      junctions: true,
+    },
+    agents: [
+      ['CAR', 0, 28, 1], ['SUV', 0, 62, 1], ['TRUCK', -3.35, 14, 1], ['CAR', -3.35, -14, 1], ['VAN', -3.35, 48, 1], ['SUV', 0, -12, 1],
+      ['CAR', -6.7, 40, -1], ['BUS', -6.7, 95, -1], ['SUV', -10.0, 20, -1], ['CAR', -10.0, 70, -1],
+      ['BICYCLE', 2.6, 22, 1], ['PEDESTRIAN', 5.2, 12, 1], ['PEDESTRIAN', 5.6, 30, -1], ['PEDESTRIAN', 5.0, 46, 1], ['ANIMAL', 5.9, 31.2, -1],
+      ['PEDESTRIAN', -13.4, 25, -1], ['PEDESTRIAN', -13.0, 55, 1], ['MOTORCYCLE', -6.7, 130, -1], ['PEDESTRIAN', 5.3, -6, 1],
+    ],
+  },
+  park: {
+    limit: 10, vmax: 2.4, gear: 'D',
+    road: { surface: [-3.6, 3.6], lines: [], bays: [{ y: 5.9, len: 4.8, spacing: 2.7 }, { y: -5.9, len: 4.8, spacing: 2.7 }] },
+    agents: [], parkRows: true,
+  },
+  hwy: {
+    limit: 100, vmax: 100 / 3.6, gear: 'D', laneChanges: true,
+    road: {
+      surface: [-5.6, 5.6],
+      lines: [{ y: 1.8, dash: 3, gap: 9 }, { y: -1.8, dash: 3, gap: 9 }, { y: 5.4, solid: true, edge: true, w: 0.2 }, { y: -5.4, solid: true, edge: true, w: 0.2 }],
+    },
+    agents: [
+      ['TRUCK', 3.6, 35, 1, 24], ['CAR', 3.6, 80, 1, 25], ['BUS', 3.6, -20, 1, 25.5], ['CAR', 0, 45, 1, 26.5], ['SUV', 0, -18, 1, 27.5],
+      ['VAN', -3.6, 10, 1, 31], ['CAR', -3.6, 60, 1, 30], ['MOTORCYCLE', -3.6, -25, 1, 33], ['SUV', 3.6, -45, 1, 25],
+    ],
+  },
+};
+
+const sim = { t: 0, scen: null, odo: 0, v: 0, prevV: 0, lat: 0, latTarget: 0, lc: null, nextLc: 10, agents: [], junctionS: 0, nextId: 1, nextAgentLc: 6 };
+const isVeh = a => a.kind !== 'PEDESTRIAN' && a.kind !== 'ANIMAL';
+function resetSim(name) {
+  rnd = 7;
+  const sc = SCENARIOS[name];
+  Object.assign(sim, { scen: name, t: 0, odo: 0, v: sc.vmax * (name === 'city' ? 0.9 : 1), prevV: 0, lat: 0, lc: null, nextLc: 9, agents: [], junctionS: 150, nextAgentLc: 5 });
+  for (const a of sc.agents) {
+    const [k, y, s, dir, v] = a;
+    const kind = k === 'SUV' ? 'CAR' : k, d = SIZE[k];
+    const base = v != null ? v : kind === 'PEDESTRIAN' || kind === 'ANIMAL' ? 1.1 + rand() * 0.4 : kind === 'BICYCLE' ? 5.4 : 13.5 + rand() * 1.5;
+    sim.agents.push({ id: sim.nextId++, kind, y, s, dir, L: d[0], W: d[1], H: d[2], v: base, vBase: base, conf: 0.62 + rand() * 0.34, miss: 0, brake: false, ind: null, lc: null });
+  }
+  if (sc.parkRows) {
+    for (let i = -8; i < 40; i++) for (const side of [-1, 1]) {
+      if (rand() < 0.25) continue;
+      const k = rand() < 0.35 ? 'SUV' : 'CAR', d = SIZE[k];
+      sim.agents.push({ id: sim.nextId++, kind: 'CAR', y: side * (5.9 + (rand() - 0.5) * 0.3), s: i * 2.7 + 1.35, dir: side, yawFix: side * Math.PI / 2 + (rand() - 0.5) * 0.06, L: d[0], W: d[1], H: d[2], v: 0, vBase: 0, conf: 0.7 + rand() * 0.25, miss: 0, parked: true });
+    }
+    const add = (o) => sim.agents.push(Object.assign({ id: sim.nextId++, miss: 0, conf: 0.85, brake: false, ind: null }, o));
+    add({ kind: 'CAR', y: -1.9, s: 70, dir: -1, L: 4.6, W: 1.85, H: 1.46, v: 2.0, vBase: 2.0 });
+    add({ kind: 'PEDESTRIAN', y: 2.4, s: 18, dir: 1, L: 0.5, W: 0.5, H: 1.72, v: 1.1, vBase: 1.1 });
+    add({ kind: 'PEDESTRIAN', y: 6, s: 34, dir: 0, cross: -1, L: 0.5, W: 0.5, H: 1.72, v: 1.2, vBase: 1.2 });
+    add({ kind: 'ANIMAL', y: 2.0, s: 18.6, dir: 1, L: 0.95, W: 0.32, H: 0.62, v: 1.1, vBase: 1.1 });
+  }
+  frames.length = 0; display.forEach(d => scene.remove(d.grp)); display.clear();
+  lightDisplays.forEach(l => scene.remove(l.grp)); lightDisplays.clear();
+  lastLight = null;
+  buildRoad(sc.road); applyTheme();
+  document.getElementById('limit').textContent = sc.limit;
+}
+const CYCLE = 24;   // green 11 s, amber 3 s, red 10 s
+function lightState(t) { const p = t % CYCLE; return p < 11 ? 'GREEN' : p < 14 ? 'AMBER' : 'RED'; }
+function stopTarget(front, v, stopS, state) {
+  const d = stopS - front;
+  if (d < -0.5 || d > 70 || state === 'GREEN') return Infinity;
+  if (state === 'AMBER' && d < v * v / (2 * 3.2)) return Infinity;
+  return Math.sqrt(Math.max(0, 2 * 2.2 * (d - 0.6)));
+}
+const smooth = p => p <= 0 ? 0 : p >= 1 ? 1 : (1 - Math.cos(Math.PI * p)) / 2;
+function laneClear(y, s, except, ahead = 22, behind = 14) {
+  for (const b of sim.agents) if (b !== except && isVeh(b) && Math.abs(b.y - y) < 1.6 && b.s - s < ahead && s - b.s < behind) return false;
+  if (except && Math.abs(sim.lat - y) < 1.6 && sim.odo - s < ahead && s - sim.odo < behind) return false;
+  return true;
+}
+function stepSim(dt) {
+  const sc = SCENARIOS[sim.scen];
+  sim.t += dt;
+  const state = lightState(sim.t);
+  if (sim.scen === 'city' && sim.junctionS - sim.odo < -40) sim.junctionS += 240;
+  // ego lane changes on the highway: indicate 2.5 s, then move over 4 s
+  if (sc.laneChanges) {
+    if (!sim.lc && sim.t > sim.nextLc) {
+      const to = Math.abs(sim.lat) < 0.5 ? -3.6 : 0;
+      if (laneClear(to, sim.odo, null)) sim.lc = { from: sim.lat, to, t0: sim.t };
+      else sim.nextLc = sim.t + 2;
+    }
+    if (sim.lc) {
+      const p = (sim.t - sim.lc.t0 - 2.5) / 4;
+      sim.lat = sim.lc.from + (sim.lc.to - sim.lc.from) * smooth(p);
+      if (p >= 1) { sim.lc = null; sim.nextLc = sim.t + 16; }
+    }
+  }
+  let vt = sc.vmax;
+  const egoFront = sim.odo + EGO_L - REAR_OVERHANG;
+  if (sim.scen === 'city') vt = Math.min(vt, stopTarget(egoFront, sim.v, sim.junctionS, state));
+  for (const a of sim.agents) {
+    if (a.dir !== 1 || Math.abs(a.y - sim.lat) > 1.4 || !isVeh(a)) continue;
+    const gap = (a.s - a.L / 2) - egoFront;
+    if (gap > 0 && gap < 70) vt = Math.min(vt, Math.max(0, a.v + 0.6 * (gap - (sim.scen === 'hwy' ? 18 : 7))));
+  }
+  sim.prevV = sim.v;
+  sim.v += Math.max(-4, Math.min(1.6, (vt - sim.v) * 1.5)) * dt;
+  sim.v = Math.max(0, sim.v);
+  sim.odo += sim.v * dt;
+  // agent lane changes on the highway
+  if (sc.laneChanges && sim.t > sim.nextAgentLc) {
+    sim.nextAgentLc = sim.t + 7;
+    const cands = sim.agents.filter(a => isVeh(a) && !a.lc && Math.abs(a.s - sim.odo) < 60 && a.kind !== 'TRUCK' && a.kind !== 'BUS');
+    if (cands.length) {
+      const a = cands[Math.floor(rand() * cands.length)], dirs = [3.6, -3.6].filter(d => Math.abs(a.y + d) < 4);
+      const to = a.y + dirs[Math.floor(rand() * dirs.length)];
+      if (laneClear(to, a.s, a)) a.lc = { from: a.y, to, t0: sim.t };
+    }
+  }
+  for (const a of sim.agents) {
+    if (a.parked) { if (a.s - sim.odo < -30) a.s += 48 * 2.7; continue; }
+    if (a.cross) {
+      a.y += a.cross * a.v * dt;
+      if (a.y < -6) { a.y = 6; a.s = sim.odo + 30 + rand() * 20; }
+      if (a.s - sim.odo < -30) a.s = sim.odo + 40;
+      continue;
+    }
+    if (a.lc) {
+      const p = (sim.t - a.lc.t0 - 2.2) / 4;
+      a.y = a.lc.from + (a.lc.to - a.lc.from) * smooth(p);
+      a.ind = a.lc.to > a.lc.from ? 'LEFT' : 'RIGHT';
+      if (p >= 1) { a.lc = null; a.ind = null; }
+    }
+    let vt2 = a.vBase;
+    if (isVeh(a) && sim.scen !== 'park') {
+      if (sim.scen === 'city' && a.kind !== 'BICYCLE') {
+        const front = a.dir === 1 ? a.s + a.L / 2 : -(a.s - a.L / 2);
+        const stopS = a.dir === 1 ? sim.junctionS : -(sim.junctionS + 15);
+        vt2 = Math.min(vt2, stopTarget(front, a.v, stopS, state));
+      }
+      const minGap = sim.scen === 'hwy' ? 16 : 6;
+      for (const b of sim.agents) {
+        if (b === a || b.dir !== a.dir || Math.abs(b.y - a.y) > 1.4 || !isVeh(b) || b.parked) continue;
+        const gap = a.dir === 1 ? (b.s - b.L / 2) - (a.s + a.L / 2) : (a.s - a.L / 2) - (b.s + b.L / 2);
+        if (gap > 0 && gap < 60) vt2 = Math.min(vt2, Math.max(0, b.v + 0.6 * (gap - minGap)));
+      }
+      if (a.dir === 1 && Math.abs(a.y - sim.lat) < 1.4) { const gap = (sim.odo - REAR_OVERHANG) - (a.s + a.L / 2); if (gap > 0 && gap < 50) vt2 = Math.min(vt2, Math.max(0, sim.v + 0.6 * (gap - minGap))); }
+      const prev = a.v;
+      a.v += Math.max(-4, Math.min(1.6, (vt2 - a.v) * 1.5)) * dt; a.v = Math.max(0, a.v);
+      a.brake = (prev - a.v) / dt > 0.5 || (a.v < 0.3 && a.vBase > 2);
+    }
+    a.s += a.dir * a.v * dt;
+    const rel = a.s - sim.odo;
+    if (rel < -40) { a.s = sim.odo + 120 + rand() * 50; a.v = a.vBase; a.lc = null; a.ind = null; }
+    else if (rel > 180) { a.s = sim.odo - 35; a.v = a.vBase; }
+  }
+  return state;
+}
+function camerasFor(x, y) {
+  const ang = Math.atan2(y, x) * 180 / Math.PI, c = [];
+  if (Math.abs(ang) < 100) c.push('front');
+  if (Math.abs(ang) > 80) c.push('rear');
+  if (ang > 20 && ang < 160) c.push('left');
+  if (ang < -20 && ang > -160) c.push('right');
+  return c;
+}
+// One SceneFrame in the vehicle frame (origin: ground under the rear axle; x fwd, y left)
+function makeFrame(state) {
+  const sc = SCENARIOS[sim.scen], objects = [];
+  for (const a of sim.agents) {
+    const x = a.s - sim.odo, y = a.y - sim.lat;
+    if (x < -35 || x > 90) continue;
+    if (rand() < 0.04 && !a.parked) { a.miss++; if (a.miss > 5) continue; } else a.miss = 0;
+    const yaw = a.yawFix != null ? a.yawFix : a.cross ? -Math.PI / 2 * a.cross : a.dir === -1 ? Math.PI : 0;
+    const noise = 0.05 + Math.abs(x) * 0.004;
+    objects.push({
+      trackId: a.id, kind: a.kind, x: x + gauss() * noise, y: y + gauss() * noise * 0.6, yaw: yaw + gauss() * 0.02,
+      length: a.L, width: a.W, height: a.H,
+      vx: (a.cross ? 0 : a.dir * a.v) - sim.v, vy: a.cross ? a.cross * a.v : 0,
+      lights: { brake: !!a.brake, left: a.ind === 'LEFT', right: a.ind === 'RIGHT' },
+      state: a.miss ? 'COASTING' : 'CONFIRMED',
+      debug: { confidence: Math.min(0.99, a.conf + gauss() * 0.03), cameras: camerasFor(x, y) },
+    });
+  }
+  const trafficLights = [], signs = [{ type: 'SPEED_LIMIT', value: sc.limit }];
+  let junction = null;
+  if (sim.scen === 'city') {
+    const jx = sim.junctionS - sim.odo;
+    if (jx > -30 && jx < 120) {
+      junction = jx;
+      trafficLights.push({ id: 1, x: jx + 1.2, y: 3.0, z: 0, state, facesEgo: true }, { id: 2, x: jx + 1.2, y: -5.0, z: 0, state, facesEgo: true });
+    }
+  }
+  const stopD = junction != null && state !== 'GREEN' ? junction - (EGO_L - REAR_OVERHANG) : Infinity;
+  const pathLen = Math.max(0, Math.min(Math.max(6, sim.v * 3.2), stopD, 45));
+  let indicator = 'NONE';
+  if (sim.lc && sim.t - sim.lc.t0 < 6.2) indicator = sim.lc.to < sim.lc.from ? 'RIGHT' : 'LEFT';
+  const brake = (sim.prevV - sim.v) * FRAME_HZ > 0.5 || (sim.v < 0.3 && sc.vmax > 3);
+  return {
+    timeNs: Math.round(sim.t * 1e9), t: sim.t,
+    ego: { speedMps: sim.v, gear: sc.gear, brake, indicator, odoM: sim.odo, laneOffsetM: sim.lat, yaw: sim.lc ? Math.atan2((sim.lc.to - sim.lc.from) * Math.PI / 8 * Math.sin(Math.PI * Math.min(1, Math.max(0, (sim.t - sim.lc.t0 - 2.5) / 4))), Math.max(sim.v, 1)) : 0 },
+    objects, trafficLights, signs, junctionX: junction,
+    path: { lengthM: pathLen, widthM: 1.9 },
+    status: { fps: FRAME_HZ, latencyMs: 0, cameras: { front: 'ok', rear: 'ok', left: 'ok', right: 'ok' }, calibrated: false },
+  };
+}
+
+// ---------- renderer side: buffer, interpolate, fade ----------
+const frames = [];
+const display = new Map();
+const lightDisplays = new Map();
+let showPath = true, showDebug = false, viewMode = 'wide', lastLight = null;
+
+function setOpacity(grp, op) {
+  grp.traverse(o => {
+    if (!o.material) return;
+    const m = o.material;
+    if (m.userData.base == null) m.userData.base = m.opacity;
+    m.opacity = m.userData.base * op;
+    m.transparent = o.userData.shadow || o.userData.glow ? true : op < 0.999;
+  });
+}
+function cloneMaterials(grp) { grp.traverse(o => { if (o.material) o.material = o.material.clone(); }); }
+const angLerp = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * t; };
+function sampleFrames(t) {
+  if (!frames.length) return null;
+  let a = frames[0], b = frames[0];
+  for (let i = 0; i < frames.length; i++) if (frames[i].t <= t) { a = frames[i]; b = frames[i + 1] || frames[i]; }
+  const k = b.t > a.t ? Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t))) : 0;
+  return { a, b, k };
+}
+function footprint(L, W, col) {
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-W / 2, 0.06, -L / 2), new THREE.Vector3(W / 2, 0.06, -L / 2), new THREE.Vector3(W / 2, 0.06, L / 2), new THREE.Vector3(-W / 2, 0.06, L / 2)]);
+  return new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: col }));
+}
+const KIND_COL = { CAR: 0x3E7BFA, VAN: 0x3E7BFA, TRUCK: 0xD9822B, BUS: 0xD9822B, MOTORCYCLE: 0x8E5BD9, BICYCLE: 0x8E5BD9, PEDESTRIAN: 0xD4A017, ANIMAL: 0x2FA36B };
+
+function renderScene(dt, rt, blinkOn) {
+  const s = sampleFrames(rt);
+  if (!s) return null;
+  const { a, b, k } = s;
+  const bMap = new Map(b.objects.map(o => [o.trackId, o]));
+  const seen = new Set();
+  for (const oa of a.objects) {
+    seen.add(oa.trackId);
+    const ob = bMap.get(oa.trackId);
+    let d = display.get(oa.trackId);
+    if (!d) {
+      const grp = makeModel(oa);
+      cloneMaterials(grp);
+      const fp = footprint(oa.length, oa.width, KIND_COL[oa.kind]); grp.add(fp);
+      d = { grp, kind: oa.kind, op: 0, yaw: oa.yaw, phase: rand() * 6, fp, obj: oa };
+      setOpacity(grp, 0); scene.add(grp); display.set(oa.trackId, d);
+    }
+    const x = ob ? oa.x + (ob.x - oa.x) * k : oa.x + oa.vx * (rt - a.t);
+    const y = ob ? oa.y + (ob.y - oa.y) * k : oa.y + oa.vy * (rt - a.t);
+    const yawT = ob ? angLerp(oa.yaw, ob.yaw, k) : oa.yaw;
+    d.yaw = angLerp(d.yaw, yawT, 1 - Math.exp(-dt / 0.1));
+    d.target = 1; d.x = x; d.y = y; d.obj = oa;
+    d.phase += dt * Math.hypot(oa.vx + a.ego.speedMps, oa.vy) * 4.2;
+  }
+  for (const [id, d] of display) {
+    if (!seen.has(id)) d.target = 0;
+    const rate = d.target > d.op ? dt / 0.15 : dt / 0.25;
+    d.op = d.target > d.op ? Math.min(1, d.op + rate) : Math.max(0, d.op - rate);
+    if (d.op <= 0 && d.target === 0) { scene.remove(d.grp); display.delete(id); continue; }
+    setOpacity(d.grp, d.op);
+    place(d.grp, d.x, d.y, -0.12 * (1 - d.op));
+    d.grp.rotation.y = d.yaw;
+    const u = d.grp.userData;
+    if (u.legs) { const sw = Math.sin(d.phase) * 0.45; u.legs[0].rotation.x = sw; u.legs[1].rotation.x = -sw; u.arms[0].rotation.x = -sw * 0.7; u.arms[1].rotation.x = sw * 0.7; }
+    const lt = d.obj.lights;
+    if (lt) setLamps(d.grp, lt.brake, lt.left, lt.right, blinkOn);
+    d.fp.visible = showDebug;
+  }
+  const lSeen = new Set();
+  for (const L of a.trafficLights) {
+    lSeen.add(L.id);
+    let d = lightDisplays.get(L.id);
+    if (!d) { const grp = lightModel(); applyRoles(grp); scene.add(grp); d = { grp }; lightDisplays.set(L.id, d); }
+    const Lb = b.trafficLights.find(q => q.id === L.id) || L;
+    place(d.grp, L.x + (Lb.x - L.x) * k, L.y);
+    d.obj = L;
+    const { lamps, glow: g } = d.grp.userData;
+    for (const key of ['RED', 'AMBER', 'GREEN']) lamps[key].material.color.setHex(key === L.state ? LIGHT_RGB[key] : P.lampOff);
+    g.position.copy(lamps[L.state].position); g.position.z += 0.05; g.material.color.setHex(LIGHT_RGB[L.state]);
+  }
+  for (const [id, d] of lightDisplays) if (!lSeen.has(id)) { scene.remove(d.grp); lightDisplays.delete(id); }
+  // road, path, ego
+  const odo = a.ego.odoM + (b.ego.odoM - a.ego.odoM) * k;
+  const lat = a.ego.laneOffsetM + (b.ego.laneOffsetM - a.ego.laneOffsetM) * k;
+  const jx = a.junctionX != null ? a.junctionX + ((b.junctionX != null ? b.junctionX : a.junctionX) - a.junctionX) * k : null;
+  updateRoad(odo, jx, lat);
+  const len = a.path.lengthM + (b.path.lengthM - a.path.lengthM) * k;
+  const start = EGO_L - REAR_OVERHANG + 0.2;
+  pathMesh.visible = showPath && len > 0.5;
+  pathMesh.scale.y = Math.max(0.01, len); place(pathMesh, start + len / 2, 0, 0.06);
+  ego.rotation.y = a.ego.yaw + (b.ego.yaw - a.ego.yaw) * k;
+  setLamps(ego, a.ego.brake, a.ego.indicator === 'LEFT', a.ego.indicator === 'RIGHT', blinkOn);
+  return { speed: a.ego.speedMps + (b.ego.speedMps - a.ego.speedMps) * k, frame: a };
+}
+function applyRoles(grp) { grp.traverse(o => { const m = o.material; if (m && m.userData.role && P[m.userData.role] != null) m.color.setHex(P[m.userData.role]); }); }
+
+// ---------- camera ----------
+let camK = 0;
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+function placeCamera(speed, dt, snap) {
+  camK += ((Math.min(1, speed / 28)) - camK) * (1 - Math.exp(-dt / 1.2));
+  const portrait = camera.aspect < 1;
+  camera.fov = viewMode === 'wide' ? (portrait ? 66 : 58) : (portrait ? 62 : 52);
+  let up, back, ahead;
+  if (viewMode === 'wide') { up = 20 + camK * 4 + (portrait ? 10 : 0); back = 12 + camK * 4 + (portrait ? 4 : 0); ahead = 1 + camK * 4; }
+  else { up = 5.0 + camK * 1.4 + (portrait ? 3.5 : 0); back = 11.5 + camK * 4 + (portrait ? 5 : 0); ahead = 13 + camK * 10 + (portrait ? 2 : 0); }
+  const tp = new THREE.Vector3(0, up, -EGO_CX + back), tl = new THREE.Vector3(0, 0, -EGO_CX - ahead);
+  const f = snap ? 1 : 1 - Math.exp(-dt / 0.35);
+  camPos.lerp(tp, f); camLook.lerp(tl, f);
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  camera.updateProjectionMatrix();
+}
+
+// ---------- chime ----------
+let soundOn = true, actx = null;
+try { soundOn = localStorage.getItem('zv-sound') !== 'off'; } catch (e) {}
+function unlockAudio() {
+  try {
+    if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+    if (actx && actx.state === 'suspended') actx.resume();
+  } catch (e) {}
+}
+addEventListener('pointerdown', unlockAudio, { capture: true });
+function chime() {
+  if (!soundOn || !actx || actx.state !== 'running') return;
+  const t0 = actx.currentTime;
+  [[659.25, 0], [987.77, 0.17]].forEach(([f, dt]) => {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + dt);
+    g.gain.exponentialRampToValueAtTime(0.16, t0 + dt + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.45);
+    o.connect(g).connect(actx.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.5);
+  });
+}
+
+// ---------- HUD + debug ----------
+const kmhEl = document.getElementById('kmh'), dbgEl = document.getElementById('debug'), tagsEl = document.getElementById('tags'), noteEl = document.getElementById('note');
+const gearsEl = document.getElementById('gears'), tlEl = document.getElementById('tl'), limitEl = document.getElementById('limit');
+let goUntil = 0;
+function updateLightHud(info, now) {
+  // the light that governs the Zeekr: facing it, ahead, nearest
+  let best = null;
+  for (const L of info.frame.trafficLights) if (L.facesEgo && L.x > 0 && L.x < 80 && (!best || L.x < best.x)) best = L;
+  tlEl.hidden = !best;
+  if (!best) { lastLight = null; return; }
+  tlEl.dataset.s = best.state;
+  if (lastLight && lastLight !== 'GREEN' && best.state === 'GREEN' && info.speed < 0.5) { chime(); goUntil = now + 2500; }
+  lastLight = best.state;
+  tlEl.classList.toggle('go', now < goUntil);
+}
+const tagPool = [];
+const v3 = new THREE.Vector3();
+function tagAt(i, text, x, y, z) {
+  let el = tagPool[i];
+  if (!el) { el = document.createElement('div'); el.className = 'tag'; tagsEl.appendChild(el); tagPool[i] = el; }
+  v3.set(-y, z, -x).project(camera);
+  if (v3.z > 1 || v3.z < -1) { el.hidden = true; return; }
+  el.hidden = false; el.textContent = text;
+  el.style.left = ((v3.x + 1) / 2 * innerWidth) + 'px'; el.style.top = ((1 - v3.y) / 2 * innerHeight) + 'px';
+}
+const NAME = { CAR: 'car', VAN: 'van', TRUCK: 'truck', BUS: 'bus', MOTORCYCLE: 'motorcycle', BICYCLE: 'cyclist', PEDESTRIAN: 'person', ANIMAL: 'animal' };
+function drawDebug(info, fps) {
+  let n = 0;
+  if (showDebug && info) {
+    for (const d of display.values()) {
+      if (d.op < 0.5 || d.x > 45 || d.x < -18) continue;
+      const o = d.obj, dist = Math.hypot(d.x - EGO_CX, d.y);
+      const flags = (o.lights && o.lights.brake ? ' brake' : '') + (o.lights && (o.lights.left || o.lights.right) ? (o.lights.left ? ' ind-L' : ' ind-R') : '') + (o.state === 'COASTING' ? ' coast' : '');
+      tagAt(n++, `${NAME[o.kind]} ${Math.round(o.debug.confidence * 100)}% #${o.trackId} ${dist.toFixed(1)}m${flags}`, d.x, d.y, o.height + 0.35);
+    }
+    for (const d of lightDisplays.values()) tagAt(n++, `light ${d.obj.state.toLowerCase()} #${d.obj.id}`, d.obj.x, d.obj.y, 4.4);
+    const f = info.frame;
+    dbgEl.textContent = [
+      `render       ${fps.toFixed(0)} fps`,
+      `perception   ${f.status.fps.toFixed(1)} Hz (mock)`,
+      `display lag  ${(DELAY * 1000).toFixed(0)} ms`,
+      `tracks       ${f.objects.length}`,
+      `lights       ${f.trafficLights.length}`,
+      `ego          ${f.ego.brake ? 'brake ' : ''}${f.ego.indicator !== 'NONE' ? 'ind-' + f.ego.indicator[0] : ''}`,
+      `chime        ${soundOn ? (actx && actx.state === 'running' ? 'on' : 'tap to allow') : 'muted'}`,
+      `calibrated   ${f.status.calibrated ? 'yes' : 'no'}`,
+    ].join('\n');
+  }
+  for (let i = n; i < tagPool.length; i++) tagPool[i].hidden = true;
+  dbgEl.hidden = !showDebug;
+}
+
+// ---------- controls ----------
+const pressed = (el, on) => el.setAttribute('aria-pressed', String(on));
+const scBtns = { city: 'sc-city', park: 'sc-park', hwy: 'sc-hwy' };
+for (const [name, id] of Object.entries(scBtns)) document.getElementById(id).addEventListener('click', () => {
+  for (const [n2, id2] of Object.entries(scBtns)) pressed(document.getElementById(id2), n2 === name);
+  resetSim(name); warm();
+});
+for (const [mode, id] of [['wide', 'vw-wide'], ['close', 'vw-close']]) document.getElementById(id).addEventListener('click', () => {
+  viewMode = mode; pressed(document.getElementById('vw-wide'), mode === 'wide'); pressed(document.getElementById('vw-close'), mode === 'close');
+});
+const pathBtn = document.getElementById('tg-path'), dbgBtn = document.getElementById('tg-debug'), sndBtn = document.getElementById('tg-sound'), thmBtn = document.getElementById('tg-theme');
+pathBtn.addEventListener('click', () => { showPath = !showPath; pressed(pathBtn, showPath); });
+function setSound(on) { soundOn = on; pressed(sndBtn, on); sndBtn.textContent = on ? 'Chime' : 'Muted'; try { localStorage.setItem('zv-sound', on ? 'on' : 'off'); } catch (e) {} }
+sndBtn.addEventListener('click', () => { setSound(!soundOn); if (soundOn) { unlockAudio(); setTimeout(chime, 60); } });
+setSound(soundOn);
+thmBtn.addEventListener('click', () => {
+  themeMode = themeMode === 'auto' ? 'light' : themeMode === 'light' ? 'dark' : 'auto';
+  try { localStorage.setItem('zv-theme', themeMode); } catch (e) {}
+  applyTheme();
+});
+function toggleDebug() { showDebug = !showDebug; pressed(dbgBtn, showDebug); noteEl.hidden = true; }
+dbgBtn.addEventListener('click', toggleDebug);
+let pressT = null;
+const speedEl = document.getElementById('speed');
+speedEl.addEventListener('pointerdown', () => { pressT = setTimeout(toggleDebug, 600); });
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) speedEl.addEventListener(ev, () => clearTimeout(pressT));
+setTimeout(() => { noteEl.hidden = true; }, 10000);
+
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+// ---------- main loop ----------
+function warm() { for (let i = 0; i < 4; i++) { const st = stepSim(1 / FRAME_HZ); frames.push(makeFrame(st)); } }
+resetSim('city'); warm();
+let last = performance.now(), acc = 0, fpsS = 60, first = true;
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fpsS += ((dt > 0 ? 1 / dt : 60) - fpsS) * 0.05;
+  acc += dt;
+  while (acc >= 1 / FRAME_HZ) { acc -= 1 / FRAME_HZ; const st = stepSim(1 / FRAME_HZ); frames.push(makeFrame(st)); if (frames.length > 16) frames.shift(); }
+  const rt = sim.t + acc - DELAY - 1 / FRAME_HZ;
+  const blinkOn = (now % 667) < 380;
+  const info = renderScene(dt, rt, blinkOn);
+  if (info) {
+    placeCamera(info.speed, dt, first); first = false;
+    kmhEl.textContent = Math.round(info.speed * 3.6);
+    const g = info.frame.ego.gear;
+    for (const c of gearsEl.children) c.classList.toggle('on', c.textContent === g);
+    const sign = info.frame.signs.find(q => q.type === 'SPEED_LIMIT');
+    if (sign) limitEl.textContent = sign.value;
+    updateLightHud(info, now);
+  }
+  renderer.render(scene, camera);
+  drawDebug(info, fpsS);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
