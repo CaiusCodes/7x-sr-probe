@@ -224,6 +224,10 @@ to a half-resolution 2x2 grid bitmap and shown on screen (max ~8/s). Rules:
 - Camera closes when the screen is left (onPause).
 - No recording, no saving, no encoding: no MediaRecorder, MediaCodec, file or network output (smoke-tested on the dex).
 - No capture-request settings beyond the standard preview template; no vehicle calls added.
+- v0.8.2 car result: works; 2x2 order is front, rear, left, right (matches dts88/zeekr-shortcut-car notes).
+- v0.8.3 (lessons from dts88's notes): camera close runs on the camera thread (close can block for seconds in the
+  camera service); no automatic retry when the car takes the camera back; at least 3 s between close and reopen, because
+  rapid open/close around sleep can leave a stuck camera-service record that only a head-unit restart clears.
 
 ## C. What the app writes
 

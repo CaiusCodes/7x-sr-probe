@@ -62,6 +62,7 @@ class SurroundPreviewActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         if ((application as ProbeApplication).vm.reader.isParked() == false) { status.text = "Gear is not P. Preview only runs parked."; return }
         if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 7); return
@@ -70,11 +71,11 @@ class SurroundPreviewActivity : Activity() {
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) start()
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) { if (resumed) start() }
         else status.text = "Camera permission was not granted, so nothing was opened."
     }
 
-    override fun onPause() { stop(); super.onPause() }
+    override fun onPause() { resumed = false; stop(); super.onPause() }
 
     private fun pickCamera(cm: CameraManager): Pair<String, Size>? {
         var best: Pair<String, Size>? = null
@@ -90,7 +91,14 @@ class SurroundPreviewActivity : Activity() {
     }
 
     private fun start() {
-        if (device != null) return
+        if (device != null || opening) return
+        val since = SystemClock.elapsedRealtime() - lastClosed
+        if (since < REOPEN_GAP_MS) {
+            status.text = "Waiting a moment before reopening the camera…"
+            main.postDelayed({ if (!isFinishing && resumed) start() }, REOPEN_GAP_MS - since)
+            return
+        }
+        opening = true
         try {
             val cm = getSystemService(CameraManager::class.java)
             val (id, size) = pickCamera(cm) ?: run { status.text = "No surround (tall) stream found."; return }
@@ -103,7 +111,8 @@ class SurroundPreviewActivity : Activity() {
             ReadOnlyGuard.count("camera:openCamera(preview only)")
             cm.openCamera(id, object : CameraDevice.StateCallback() {
                 override fun onOpened(d: CameraDevice) {
-                    device = d
+                    device = d; opening = false
+                    if (!resumed) { closeQuietly(); return }
                     @Suppress("DEPRECATION")
                     d.createCaptureSession(listOf(r.surface), object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(s: CameraCaptureSession) {
@@ -115,10 +124,12 @@ class SurroundPreviewActivity : Activity() {
                         override fun onConfigureFailed(s: CameraCaptureSession) { main.post { status.text = "Camera session failed to configure." } }
                     }, bg)
                 }
-                override fun onDisconnected(d: CameraDevice) { d.close(); device = null; main.post { status.text = "Camera disconnected (another app may be using it)." } }
-                override fun onError(d: CameraDevice, error: Int) { d.close(); device = null; main.post { status.text = "Camera error $error." } }
+                // The car may take the camera back at any time (its own 360 view, parking aid). We let it go and do not retry.
+                override fun onDisconnected(d: CameraDevice) { device = d; opening = false; closeQuietly(); main.post { status.text = "The car took the camera back. Close and reopen this screen to try again." } }
+                override fun onError(d: CameraDevice, error: Int) { device = d; opening = false; closeQuietly(); main.post { status.text = "Camera error $error. Not retrying." } }
             }, bg)
         } catch (t: Throwable) {
+            opening = false
             status.text = "Could not open the camera: ${ReadOnlyGuard.describe(t)}"
         }
     }
@@ -141,7 +152,9 @@ class SurroundPreviewActivity : Activity() {
             if (now - lastFrame < 125) return
             lastFrame = now
             val tiles = if (size.height >= size.width * 3) 4 else 1
-            val tileH = size.height / tiles
+            // Stacked stream: four square views separated by 5 thin bands (1280x5140 = 4x1280 + 5x4px).
+            val band = if (tiles == 4 && size.height > size.width * 4) (size.height - size.width * 4) / 5 else 0
+            val tileH = if (band > 0) size.width else size.height / tiles
             val sw = size.width / 2; val sh = tileH / 2
             val cols = if (tiles == 4) 2 else 1
             val outW = sw * cols; val outH = sh * (if (tiles == 4) 2 else 1)
@@ -152,7 +165,7 @@ class SurroundPreviewActivity : Activity() {
             for (t in 0 until tiles) {
                 val ox = (t % cols) * sw; val oy = (t / cols) * sh
                 for (j in 0 until sh) {
-                    val sy = t * tileH + j * 2
+                    val sy = band + t * (tileH + band) + j * 2
                     for (i in 0 until sw) {
                         val sx = i * 2
                         val Y = (yb.get(sy * yRow + sx).toInt() and 0xff)
@@ -166,12 +179,17 @@ class SurroundPreviewActivity : Activity() {
                     }
                 }
             }
-            val bmp = Bitmap.createBitmap(px, outW, outH, Bitmap.Config.ARGB_8888)
+            val bmp = Bitmap.createBitmap(px, outW, outH, Bitmap.Config.ARGB_8888).copy(Bitmap.Config.ARGB_8888, true)
+            if (tiles == 4) {
+                val c = android.graphics.Canvas(bmp)
+                val paint = android.graphics.Paint().apply { color = Color.WHITE; textSize = sh / 12f; isFakeBoldText = true; setShadowLayer(4f, 0f, 0f, Color.BLACK) }
+                for (t in 0 until 4) c.drawText(LABELS[t], (t % cols) * sw + sw / 30f, (t / cols) * sh + sh / 9f, paint)
+            }
             frames++
             val n = frames
             main.post {
                 bitmap = bmp; image.setImageBitmap(bmp)
-                status.text = "Surround preview (parked, nothing saved) · frame $n · views 1-4 left-to-right, top-to-bottom"
+                status.text = "Surround preview (parked, nothing saved) · frame $n · front / rear / left / right"
             }
         } catch (t: Throwable) {
             main.post { status.text = "Frame error: ${ReadOnlyGuard.describe(t)}" }
@@ -180,11 +198,30 @@ class SurroundPreviewActivity : Activity() {
         }
     }
 
+    /** Closes on the camera thread: CameraDevice.close() can block for seconds inside the camera service. */
     private fun stop() {
         main.removeCallbacks(watchGear)
-        runCatching { session?.close() }; session = null
-        runCatching { device?.close() }; device = null
-        runCatching { reader?.close() }; reader = null
-        thread?.quitSafely(); thread = null; bg = null
+        closeQuietly()
+    }
+
+    private fun closeQuietly() {
+        val s = session; val d = device; val r = reader; val t = thread; val h = bg
+        session = null; device = null; reader = null; thread = null; bg = null
+        if (s == null && d == null && r == null && t == null) return
+        val work = Runnable {
+            runCatching { s?.close() }; runCatching { d?.close() }; runCatching { r?.close() }
+            lastClosed = SystemClock.elapsedRealtime()
+            t?.quitSafely()
+        }
+        if (h != null) h.post(work) else work.run()
+    }
+
+    private var resumed = false
+    @Volatile private var opening = false
+
+    companion object {
+        private val LABELS = arrayOf("FRONT", "REAR", "LEFT", "RIGHT")
+        private const val REOPEN_GAP_MS = 3000L
+        @Volatile private var lastClosed = 0L
     }
 }

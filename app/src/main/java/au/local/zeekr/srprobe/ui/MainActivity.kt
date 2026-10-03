@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.8.2", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.8.3", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
