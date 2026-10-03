@@ -15,7 +15,7 @@ object ProviderProbe {
 
     data class UriResult(val uri: String, val type: String?, val columns: List<String>, val rows: List<String>, val count: Int, val error: String?)
 
-    private const val MAX_URIS = 20
+    private const val MAX_URIS = 40
     private const val MAX_ROWS = 5
 
     fun run(context: Context, vendorUris: List<String>): List<UriResult> {

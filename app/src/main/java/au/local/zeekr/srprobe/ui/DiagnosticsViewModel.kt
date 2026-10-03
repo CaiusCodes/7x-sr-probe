@@ -55,6 +55,7 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var configNames: List<String> = emptyList(); private set
     @Volatile var srInspect: List<au.local.zeekr.srprobe.platform.DexInspector.Result> = emptyList(); private set
     @Volatile var srFeed: SrFeed? = null; private set
+    @Volatile var providerPaths: List<au.local.zeekr.srprobe.platform.ProviderPaths.Found> = emptyList(); private set
     @Volatile var providerResults: List<au.local.zeekr.srprobe.platform.ProviderProbe.UriResult> = emptyList(); private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
@@ -242,10 +243,16 @@ class DiagnosticsViewModel(private val app: Context) {
         val parked = reader.isParked()
         if (parked == false) return "Gear does not read P. This step only runs parked."
         if (parked == null && !confirmedParkedByUser) return "GEAR_UNKNOWN"
-        val vendorUris = dexScans.flatMap { it.matchingStrings }
-            .filter { it.startsWith("content://com.zeekr.vehicle.data") }.distinct()
+        val auth = "com.zeekr.vehicle.data"
+        val scanUris = dexScans.flatMap { it.endpointStrings + it.matchingStrings }.filter { it.startsWith("content://$auth") }
+        val extra = dexScans.filter { d -> (d.manifestStrings + d.endpointStrings).any { it.contains(auth) } }.map { it.path }
         worker.execute {
+            step("Find provider paths in ZeekrVehicleService (names only)") {
+                providerPaths = au.local.zeekr.srprobe.platform.ProviderPaths.inspect("ZeekrVehicleService", extra, auth)
+                recorder.log("Provider paths: ${providerPaths.sumOf { it.strings.size }} strings in ${providerPaths.size} files")
+            }
             step("Opt-in: query vehicle data provider (read-only)") {
+                val vendorUris = (scanUris + au.local.zeekr.srprobe.platform.ProviderPaths.candidatePaths(providerPaths, auth)).distinct()
                 providerResults = au.local.zeekr.srprobe.platform.ProviderProbe.run(app, vendorUris)
                 recorder.log("Provider: ${providerResults.size} URIs, ${providerResults.count { it.error == null }} answered")
             }

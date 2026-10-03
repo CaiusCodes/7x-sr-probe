@@ -71,6 +71,13 @@ fun main(args: Array<String>) {
     println("ledger: " + ReadOnlyGuard.ledgerSnapshot())
 
     if (args.isNotEmpty()) {
+        val pp = au.local.zeekr.srprobe.platform.ProviderPaths.inspectOne(args[0], "au.local.zeekr.srprobe.reports")
+        println("provider paths: ${pp.providerClasses} ${pp.strings.take(12)} note=${pp.note}")
+        check(pp.providerClasses.any { it.endsWith("ReportProvider") }, "provider path finder: ContentProvider subclass found from dex bytes")
+        check("srprobe/export" in pp.strings, "provider path finder: const-string operands decoded")
+        val cands = au.local.zeekr.srprobe.platform.ProviderPaths.candidatePaths(listOf(
+            au.local.zeekr.srprobe.platform.ProviderPaths.Found("x", emptyList(), listOf("com.zeekr.vehicle.data", "car_info/#", "speed", "a b", "java.lang.String"), emptyList(), null)), "com.zeekr.vehicle.data")
+        check(cands == listOf("content://com.zeekr.vehicle.data/car_info", "content://com.zeekr.vehicle.data/speed"), "provider candidates: $cands")
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")
         // v0.2: a dex image embedded in a larger file (as in a .vdex) is found and parsed.

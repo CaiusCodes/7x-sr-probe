@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.5 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.6 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -324,7 +324,13 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     }
 
     fun providerText(): String = buildString {
-        appendLine("VEHICLE DATA PROVIDER (read-only query, v0.5)")
+        appendLine("VEHICLE DATA PROVIDER (read-only query, v0.6)")
+        vm.providerPaths.forEach { p ->
+            appendLine("source ${p.source}" + (p.note?.let { "  note: $it" } ?: ""))
+            if (p.providerClasses.isNotEmpty()) appendLine("  providers: ${p.providerClasses.joinToString()}")
+            if (p.fullUris.isNotEmpty()) appendLine("  uris in code: ${p.fullUris.joinToString()}")
+            if (p.strings.isNotEmpty()) appendLine("  strings: ${p.strings.joinToString(" | ") { it.take(60) }}")
+        }
         if (vm.providerResults.isEmpty()) appendLine("  (not run)")
         vm.providerResults.forEach { r ->
             appendLine("== ${r.uri}  type=${r.type}")
@@ -340,7 +346,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.5 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.6 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -423,7 +429,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.5")
+        put("app", "7X SR Probe 0.6")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {

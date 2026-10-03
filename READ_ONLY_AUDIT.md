@@ -191,7 +191,8 @@ The observer is a `java.lang.reflect.Proxy` implementing `ISRObjectsObserver`. A
 | `ContentResolver.getType(uri)` | Returns a MIME string only. |
 
 - Only authority `com.zeekr.vehicle.data` (DataContentProvider, exported by ZeekrVehicleService, found by the v0.3 manifest scan).
-- URIs tried: the root, plus `content://com.zeekr.vehicle.data/...` strings already present in the vendor's own dex (discovery). No guessing or brute-forcing of paths. At most 20 URIs, 5 rows each.
+- URIs tried: the root, plus `content://com.zeekr.vehicle.data/...` strings already present in the vendor's own dex (discovery). At most 40 URIs, 5 rows each.
+- v0.6: the v0.5 car run showed the root URI returns a null cursor. v0.6 reads ZeekrVehicleService's dex **as bytes** (`ProviderPaths`, no class loading) and lists the `const-string` operands inside its ContentProvider subclasses, their nested classes and contract-style classes in the same package (where `UriMatcher.addURI` paths live). Path-like strings from that list (wildcard `#`/`*` segments cut off) are queried under the same authority. No paths are invented or enumerated; every queried path is a string the vendor's provider code contains.
 - Enforced in `ReadOnlyGuard.queryProvider/providerType` (`isProviderAllowed`); smoke-tested.
 - Never used: `insert`, `bulkInsert`, `update`, `delete`, `call`, `openFile`, `openAssetFile`, `applyBatch`, `registerContentObserver`.
 - Column names that look private are dropped; VIN-like values redacted.
