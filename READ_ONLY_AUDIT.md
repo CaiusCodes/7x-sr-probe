@@ -197,6 +197,9 @@ The observer is a `java.lang.reflect.Proxy` implementing `ISRObjectsObserver`. A
 - Never used: `insert`, `bulkInsert`, `update`, `delete`, `call`, `openFile`, `openAssetFile`, `applyBatch`, `registerContentObserver`.
 - Column names that look private are dropped; VIN-like values redacted.
 
+- v0.7 (owner approved on 2026-10-03): the v0.6 run found `com.zeekr.vehicle.someip.SomIpProvider` in ZeekrVehicleService. Its authority is admitted to the same query/getType allowlist **only** if that APK's own manifest declares that exact class as `exported=true` with no `permission`/`readPermission`, and the authority is a single `com.zeekr.` name (`ReadOnlyGuard.admitFromManifest`, smoke-tested for every refusal case). Then the same rules apply: query/getType only, root plus that provider's own const-string paths, max 30.
+- v0.7 also reports each provider's manifest entry, declared method names and strings separately (names only).
+
 The v0.5 build also reports the exact exception when the ADCU SDK jar fails to load (no new calls).
 
 ## C. What the app writes

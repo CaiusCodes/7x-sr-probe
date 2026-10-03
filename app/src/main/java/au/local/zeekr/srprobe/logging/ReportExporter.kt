@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.6 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.7 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -324,18 +324,24 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     }
 
     fun providerText(): String = buildString {
-        appendLine("VEHICLE DATA PROVIDER (read-only query, v0.6)")
-        vm.providerPaths.forEach { p ->
-            appendLine("source ${p.source}" + (p.note?.let { "  note: $it" } ?: ""))
-            if (p.providerClasses.isNotEmpty()) appendLine("  providers: ${p.providerClasses.joinToString()}")
-            if (p.fullUris.isNotEmpty()) appendLine("  uris in code: ${p.fullUris.joinToString()}")
-            if (p.strings.isNotEmpty()) appendLine("  strings: ${p.strings.joinToString(" | ") { it.take(60) }}")
+        appendLine("PROVIDERS IN ZEEKRVEHICLESERVICE (names only) + read-only query, v0.7")
+        vm.providerPaths.forEach { f ->
+            appendLine("source ${f.source}" + (f.note?.let { "  note: $it" } ?: ""))
+            f.permissions.forEach { appendLine("  defines $it") }
+            if (f.fullUris.isNotEmpty()) appendLine("  uris in code: ${f.fullUris.joinToString()}")
+            f.providers.forEach { p ->
+                appendLine("# ${p.name}")
+                appendLine("  manifest: ${p.manifest ?: "(not matched)"}")
+                if (p.methods.isNotEmpty()) appendLine("  methods: ${p.methods.distinct().joinToString()}")
+                if (p.strings.isNotEmpty()) appendLine("  strings: ${p.strings.joinToString(" | ") { it.take(60) }}")
+            }
         }
+        appendLine()
         if (vm.providerResults.isEmpty()) appendLine("  (not run)")
         vm.providerResults.forEach { r ->
-            appendLine("== ${r.uri}  type=${r.type}")
-            if (r.error != null) appendLine("  error: ${r.error}")
+            if (r.error != null) appendLine("== ${r.uri}  type=${r.type}  error: ${r.error}")
             else {
+                appendLine("== ${r.uri}  type=${r.type}")
                 appendLine("  rows=${r.count} columns=${r.columns.joinToString()}")
                 r.rows.forEach { appendLine("    $it") }
             }
@@ -346,7 +352,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.6 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.7 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -429,7 +435,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.6")
+        put("app", "7X SR Probe 0.7")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {

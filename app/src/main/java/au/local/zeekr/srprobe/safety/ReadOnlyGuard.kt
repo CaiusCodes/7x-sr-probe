@@ -133,7 +133,28 @@ object ReadOnlyGuard {
     val PROVIDER_AUTHORITIES = setOf("com.zeekr.vehicle.data")
 
     fun isProviderAllowed(scheme: String?, authority: String?): Boolean =
-        scheme == "content" && authority in PROVIDER_AUTHORITIES
+        scheme == "content" && authority != null && (authority in PROVIDER_AUTHORITIES || authority in admittedAuthorities)
+
+    /**
+     * v0.7 (audit section G, approved by the owner): the SOME/IP provider's authority is not known in advance,
+     * so it is admitted at run time only when ZeekrVehicleService's own manifest declares exactly this class
+     * as exported=true with no permission or readPermission, and the authority is a single com.zeekr. name.
+     * Nothing else can be admitted.
+     */
+    const val SOMIP_PROVIDER_CLASS = "com.zeekr.vehicle.someip.SomIpProvider"
+    private val admittedAuthorities = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val PERMISSION_ATTR = Regex("(^|\\s)(permission|readPermission)=")
+
+    fun admitFromManifest(providerClass: String, manifestLine: String?): String? {
+        if (providerClass != SOMIP_PROVIDER_CLASS || manifestLine == null) return null
+        if (!Regex("(^|\\s)exported=true(\\s|$)").containsMatchIn(manifestLine)) return null
+        if (PERMISSION_ATTR.containsMatchIn(manifestLine)) return null
+        val auth = Regex("(^|\\s)authorities=(\\S+)").find(manifestLine)?.groupValues?.get(2) ?: return null
+        if (auth.contains(';') || !auth.startsWith("com.zeekr.")) return null
+        admittedAuthorities += auth
+        count("provider:admit($auth)")
+        return auth
+    }
 
     fun queryProvider(resolver: android.content.ContentResolver, uri: android.net.Uri): android.database.Cursor? {
         if (!isProviderAllowed(uri.scheme, uri.authority)) {

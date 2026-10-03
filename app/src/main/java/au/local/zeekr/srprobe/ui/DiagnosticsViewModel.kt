@@ -252,7 +252,18 @@ class DiagnosticsViewModel(private val app: Context) {
                 recorder.log("Provider paths: ${providerPaths.sumOf { it.strings.size }} strings in ${providerPaths.size} files")
             }
             step("Opt-in: query vehicle data provider (read-only)") {
-                val vendorUris = (scanUris + au.local.zeekr.srprobe.platform.ProviderPaths.candidatePaths(providerPaths, auth)).distinct()
+                val pp = au.local.zeekr.srprobe.platform.ProviderPaths
+                val uris = ArrayList<String>()
+                // SOME/IP provider first (v0.7), admitted only if its manifest entry is exported with no permission.
+                providerPaths.flatMap { it.providers }.forEach { p ->
+                    val a = ReadOnlyGuard.admitFromManifest(p.name, p.manifest)
+                    if (p.name == ReadOnlyGuard.SOMIP_PROVIDER_CLASS) recorder.log("SOME/IP provider: ${p.manifest} -> ${a ?: "not admitted"}")
+                    if (a != null) { uris += "content://$a"; uris += pp.candidatePaths(providerPaths, a, 30) }
+                }
+                uris += "content://$auth"
+                uris += scanUris
+                uris += pp.candidatePaths(providerPaths, auth)
+                val vendorUris = uris.distinct()
                 providerResults = au.local.zeekr.srprobe.platform.ProviderProbe.run(app, vendorUris)
                 recorder.log("Provider: ${providerResults.size} URIs, ${providerResults.count { it.error == null }} answered")
             }

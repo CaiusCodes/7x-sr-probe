@@ -15,14 +15,14 @@ object ProviderProbe {
 
     data class UriResult(val uri: String, val type: String?, val columns: List<String>, val rows: List<String>, val count: Int, val error: String?)
 
-    private const val MAX_URIS = 40
+    private const val MAX_URIS = 60
     private const val MAX_ROWS = 5
 
     fun run(context: Context, vendorUris: List<String>): List<UriResult> {
         val resolver = context.contentResolver
-        val uris = (listOf("content://com.zeekr.vehicle.data") + vendorUris)
+        val uris = vendorUris
             .map { it.trimEnd('/') }
-            .filter { Uri.parse(it).authority in ReadOnlyGuard.PROVIDER_AUTHORITIES }
+            .filter { Uri.parse(it).let { u -> ReadOnlyGuard.isProviderAllowed(u.scheme, u.authority) } }
             .distinct().take(MAX_URIS)
         return uris.map { query(resolver, it) }
     }

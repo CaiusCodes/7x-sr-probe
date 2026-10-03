@@ -64,6 +64,15 @@ fun main(args: Array<String>) {
     check(ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.vehicle.data"), "provider allowlist: com.zeekr.vehicle.data allowed")
     check(!ReadOnlyGuard.isProviderAllowed("content", "com.android.contacts"), "provider allowlist: other authority refused")
     check(!ReadOnlyGuard.isProviderAllowed("file", "com.zeekr.vehicle.data"), "provider allowlist: non-content scheme refused")
+    val SOMIP = ReadOnlyGuard.SOMIP_PROVIDER_CLASS
+    check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=true readPermission=x.READ authorities=com.zeekr.someip.a") == null, "SOME/IP admit: refused with readPermission")
+    check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=false authorities=com.zeekr.someip.b") == null, "SOME/IP admit: refused when not exported")
+    check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider authorities=com.zeekr.someip.c") == null, "SOME/IP admit: refused when exported absent")
+    check(ReadOnlyGuard.admitFromManifest("com.zeekr.Other", "provider name=.Other exported=true authorities=com.zeekr.other") == null, "SOME/IP admit: other provider class refused")
+    check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=true authorities=evil.auth") == null, "SOME/IP admit: non-zeekr authority refused")
+    check(!ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.someip.a"), "SOME/IP admit: refused authority stays blocked")
+    check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=true authorities=com.zeekr.vehicle.someip") == "com.zeekr.vehicle.someip", "SOME/IP admit: exported, no permission admitted")
+    check(ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.vehicle.someip"), "SOME/IP admit: admitted authority allowed")
     check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")
     check(T.perceptionScore("com.example.player.TrackInfo") == 0, "perception score: media TrackInfo ignored")
     check(T.perceptionScore("org.json.JSONObject") == 0, "perception score: JSONObject ignored")
@@ -75,8 +84,13 @@ fun main(args: Array<String>) {
         println("provider paths: ${pp.providerClasses} ${pp.strings.take(12)} note=${pp.note}")
         check(pp.providerClasses.any { it.endsWith("ReportProvider") }, "provider path finder: ContentProvider subclass found from dex bytes")
         check("srprobe/export" in pp.strings, "provider path finder: const-string operands decoded")
-        val cands = au.local.zeekr.srprobe.platform.ProviderPaths.candidatePaths(listOf(
-            au.local.zeekr.srprobe.platform.ProviderPaths.Found("x", emptyList(), listOf("com.zeekr.vehicle.data", "car_info/#", "speed", "a b", "java.lang.String"), emptyList(), null)), "com.zeekr.vehicle.data")
+        check(pp.providers.first().manifest?.contains("authorities=au.local.zeekr.srprobe.reports") == true, "provider path finder: manifest entry matched to class")
+        check(pp.providers.first().methods.contains("query"), "provider path finder: declared method names read")
+        val PP = au.local.zeekr.srprobe.platform.ProviderPaths
+        val cands = PP.candidatePaths(listOf(au.local.zeekr.srprobe.platform.ProviderPaths.Found("x", listOf(
+            au.local.zeekr.srprobe.platform.ProviderPaths.Provider("a.DataContentProvider", "provider name=.DataContentProvider exported=true authorities=com.zeekr.vehicle.data", emptyList(),
+                listOf("com.zeekr.vehicle.data", "car_info/#", "speed", "a b", "java.lang.String")),
+            au.local.zeekr.srprobe.platform.ProviderPaths.Provider("b.Other", "provider name=.Other authorities=x.y", emptyList(), listOf("secret"))), emptyList(), null)), "com.zeekr.vehicle.data")
         check(cands == listOf("content://com.zeekr.vehicle.data/car_info", "content://com.zeekr.vehicle.data/speed"), "provider candidates: $cands")
         val r = DexScanner.scan("apk", args[0])
         check(r.totalClasses > 100, "dex parser read ${r.totalClasses} classes from the built APK")

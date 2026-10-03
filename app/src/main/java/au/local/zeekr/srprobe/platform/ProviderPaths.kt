@@ -13,7 +13,17 @@ import java.util.zip.ZipFile
  */
 object ProviderPaths {
 
-    data class Found(val source: String, val providerClasses: List<String>, val strings: List<String>, val fullUris: List<String>, val note: String?)
+    /** One ContentProvider subclass: its manifest entry, declared method names and const-string operands. */
+    data class Provider(val name: String, val manifest: String?, val methods: List<String>, val strings: List<String>)
+
+    data class Found(val source: String, val providers: List<Provider>, val fullUris: List<String>, val note: String?,
+                     val permissions: List<String> = emptyList()) {
+        val providerClasses: List<String> get() = providers.map { it.name }
+        val strings: List<String> get() = providers.flatMap { it.strings }
+    }
+
+    private val THIRD_PARTY = listOf("androidx.", "android.support.", "com.sensorsdata.", "com.google.")
+    private const val MAX_PER_PROVIDER = 80
 
     private const val MAX_BYTES = 96L * 1024 * 1024
     private const val MAX_STRINGS = 200
@@ -23,8 +33,10 @@ object ProviderPaths {
     /** Paths under [authority] worth querying: vendor strings, wildcard segments cut off, capped. */
     fun candidatePaths(found: List<Found>, authority: String, cap: Int = 40): List<String> {
         val out = LinkedHashSet<String>()
-        found.flatMap { it.fullUris }.forEach { out += it.trimEnd('/') }
-        for (s in found.flatMap { it.strings }) {
+        found.flatMap { it.fullUris }.filter { it.startsWith("content://$authority") }.forEach { out += it.trimEnd('/') }
+        // Only strings from the provider whose manifest entry declares exactly this authority.
+        val own = found.flatMap { it.providers }.filter { p -> p.manifest?.split(' ')?.contains("authorities=$authority") == true }
+        for (s in own.flatMap { it.strings }) {
             if (s == authority || s.length < 2 || s.length > 60 || !PATH.matches(s)) continue
             val segs = s.split('/').takeWhile { it != "#" && it != "*" }
             if (segs.isNotEmpty()) out += "content://$authority/" + segs.joinToString("/")
@@ -44,14 +56,27 @@ object ProviderPaths {
 
     fun inspectOne(path: String, authority: String): Found {
         val f = File(path)
-        if (!f.canRead()) return Found(path, emptyList(), emptyList(), emptyList(), "not readable")
-        val providers = LinkedHashSet<String>(); val strings = LinkedHashSet<String>(); val uris = LinkedHashSet<String>()
+        if (!f.canRead()) return Found(path, emptyList(), emptyList(), "not readable")
+        val acc = LinkedHashMap<String, Pair<LinkedHashSet<String>, LinkedHashSet<String>>>()
+        val uris = LinkedHashSet<String>()
+        var manifest: List<String> = emptyList()
         var note: String? = null
         try {
-            dexImages(f).forEach { parse(it, authority, providers, strings, uris) }
+            dexImages(f).forEach { parse(it, authority, acc, uris) }
+            if (!f.name.endsWith("dex")) manifest = ZipFile(f).use { z ->
+                z.getEntry("AndroidManifest.xml")?.let { e -> ManifestReader.components(z.getInputStream(e).use { it.readBytes() }) }
+            }.orEmpty()
         } catch (t: Throwable) { note = "${t.javaClass.simpleName}: ${t.message}" }
-        if (providers.isEmpty() && note == null) note = "no ContentProvider subclass in readable dex"
-        return Found(path, providers.toList(), strings.take(MAX_STRINGS), uris.toList(), note)
+        if (acc.isEmpty() && note == null) note = "no ContentProvider subclass in readable dex"
+        val provLines = manifest.filter { it.trim().startsWith("provider ") }
+        val providers = acc.map { (name, v) ->
+            val simple = name.substringAfterLast('.')
+            val line = provLines.firstOrNull { l -> Regex("name=\\S*\\b" + Regex.escape(simple) + "(\\s|$)").containsMatchIn(l) }?.trim()
+            val third = THIRD_PARTY.any { name.startsWith(it) }
+            Provider(name, line, if (third) emptyList() else v.first.toList(), if (third) emptyList() else v.second.take(MAX_PER_PROVIDER))
+        }.sortedBy { p -> if (THIRD_PARTY.any { p.name.startsWith(it) }) 1 else 0 }
+        val perms = manifest.filter { it.trim().startsWith("permission ") }.map { it.trim() }
+        return Found(path, providers, uris.toList(), note, perms)
     }
 
     private fun dexImages(f: File): List<ByteArray> {
@@ -74,7 +99,7 @@ object ProviderPaths {
         }
     }
 
-    private fun parse(dex: ByteArray, authority: String, providers: MutableSet<String>, strings: MutableSet<String>, uris: MutableSet<String>) {
+    private fun parse(dex: ByteArray, authority: String, acc: MutableMap<String, Pair<LinkedHashSet<String>, LinkedHashSet<String>>>, uris: MutableSet<String>) {
         if (dex.size < 0x70 || dex[0] != 'd'.code.toByte()) return
         val b = ByteBuffer.wrap(dex).order(ByteOrder.LITTLE_ENDIAN)
         val stringIdsSize = b.getInt(0x38)
@@ -82,6 +107,7 @@ object ProviderPaths {
         val typeIdsOff = b.getInt(0x44)
         val classDefsSize = b.getInt(0x60)
         val classDefsOff = b.getInt(0x64)
+        val methodIdsOff = b.getInt(0x5C)
         fun str(idx: Int): String {
             var p = b.getInt(stringIdsOff + idx * 4)
             while (dex[p].toInt() and 0x80 != 0) p++
@@ -103,7 +129,8 @@ object ProviderPaths {
             if (sup != -1 && type(sup) == "Landroid/content/ContentProvider;") provDescs += names[i]
         }
         if (provDescs.isEmpty()) return
-        provDescs.forEach { providers += it.removePrefix("L").removeSuffix(";").replace('/', '.') }
+        fun dotted(d: String) = d.removePrefix("L").removeSuffix(";").replace('/', '.')
+        provDescs.forEach { acc.getOrPut(dotted(it)) { LinkedHashSet<String>() to LinkedHashSet() } }
         val pkgs = provDescs.map { it.substringBeforeLast('/') }.toSet()
 
         // Pass 2: const-string operands in the provider, its nested classes and contract-like neighbours.
@@ -113,9 +140,18 @@ object ProviderPaths {
             val simple = n.substringAfterLast('/')
             val wanted = n in provDescs || outer in provDescs || (n.substringBeforeLast('/') in pkgs && CONTRACT.containsMatchIn(simple))
             if (!wanted) continue
+            // Attribute to the provider itself, its outer provider, or (contract classes) the first provider in that package.
+            val owner = when {
+                n in provDescs -> n
+                outer in provDescs -> outer
+                else -> provDescs.first { it.substringBeforeLast('/') == n.substringBeforeLast('/') }
+            }
+            val (methods, strings) = acc.getValue(dotted(owner))
             val dataOff = b.getInt(classDefsOff + i * 32 + 24)
             if (dataOff == 0) continue
-            for (codeOff in codeOffsets(dex, dataOff)) {
+            for ((mIdx, codeOff) in methodsOf(dex, dataOff)) {
+                if (n == owner) methods += str(b.getInt(methodIdsOff + mIdx * 8 + 4))
+                if (codeOff == 0) continue
                 for (idx in constStrings(b, codeOff)) {
                     if (idx in 0 until stringIdsSize && strings.size < MAX_STRINGS) strings += str(idx)
                 }
@@ -123,7 +159,8 @@ object ProviderPaths {
         }
     }
 
-    private fun codeOffsets(dex: ByteArray, dataOff: Int): List<Int> {
+    /** (method_idx, code_off) for every direct and virtual method in a class_data_item. */
+    private fun methodsOf(dex: ByteArray, dataOff: Int): List<Pair<Int, Int>> {
         var pos = dataOff
         fun uleb(): Int {
             var r = 0; var sh = 0
@@ -131,8 +168,11 @@ object ProviderPaths {
         }
         val sf = uleb(); val inf = uleb(); val dm = uleb(); val vm = uleb()
         repeat(sf + inf) { uleb(); uleb() }
-        val out = ArrayList<Int>()
-        repeat(dm + vm) { uleb(); uleb(); val c = uleb(); if (c != 0) out += c }
+        val out = ArrayList<Pair<Int, Int>>()
+        var idx = 0
+        repeat(dm) { k -> if (k == 0) idx = 0; idx += uleb(); uleb(); out += idx to uleb() }
+        idx = 0
+        repeat(vm) { idx += uleb(); uleb(); out += idx to uleb() }
         return out
     }
 
