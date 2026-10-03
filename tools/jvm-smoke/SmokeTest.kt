@@ -73,6 +73,21 @@ fun main(args: Array<String>) {
     check(!ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.someip.a"), "SOME/IP admit: refused authority stays blocked")
     check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=true authorities=com.zeekr.vehicle.someip") == "com.zeekr.vehicle.someip", "SOME/IP admit: exported, no permission admitted")
     check(ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.vehicle.someip"), "SOME/IP admit: admitted authority allowed")
+    run {
+        val G = au.local.zeekr.srprobe.vision.FisheyeGeometry
+        val c = G.fisheyePixel(G.ray(au.local.zeekr.srprobe.vision.FisheyeGeometry.SubView(0.0, 0.0), 150.0, 150.0))
+        check(Math.abs(c[0] - 640) < 1 && Math.abs(c[1] - 640) < 1, "fisheye: centre of a straight-ahead view maps to the tile centre")
+        val axis = doubleArrayOf(0.0, 0.0, 1.0)
+        val front = G.ground(0, axis)!!
+        check(Math.abs(front[0] - (2.4 + 0.65 / Math.tan(Math.toRadians(16.0)))) < 0.01 && Math.abs(front[1]) < 1e-6, "ground: front camera axis lands ahead of the car (${front.toList()})")
+        val left = G.ground(2, axis)!!
+        check(Math.abs(left[0] - 0.9) < 1e-6 && left[1] < -2.5, "ground: left camera axis lands to the car's left (${left.toList()})")
+        val rear = G.ground(1, axis)!!
+        check(rear[0] < -3.0 && Math.abs(rear[1]) < 1e-6, "ground: rear camera axis lands behind the car")
+        check(G.ground(0, doubleArrayOf(0.0, -1.0, 1.0)) == null, "ground: a ray above the horizon has no ground point")
+        val lut = G.lut(G.subViews(1)[2])
+        check(lut[150 * 300 + 150] >= 0 && lut.count { it < 0 } < lut.size / 4, "fisheye: rear-right sub-view lookup mostly inside the tile")
+    }
     check(au.local.zeekr.srprobe.report.QrEncoder.encode("hello".toByteArray()).size == 21, "QR: short text is a version 1 code")
     check(au.local.zeekr.srprobe.report.QrEncoder.chunks("a".repeat(1200), 500).let { it.size == 3 && it[0].startsWith("SRP 1/3\n") }, "QR: report split into numbered parts")
     check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")

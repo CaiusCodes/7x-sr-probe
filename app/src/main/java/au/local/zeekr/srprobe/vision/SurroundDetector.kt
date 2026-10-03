@@ -8,7 +8,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * v0.8.5: finds cars, trucks, buses, motorbikes, bicycles and people in each surround view.
+ * v0.8.5/0.8.6: finds cars, trucks, buses, motorbikes, bicycles and people in each surround view.
  * Runs Google's COCO SSD MobileNet (assets/detect.tflite) with TensorFlow Lite on frames held in memory.
  * Results are only drawn on screen; nothing is stored or sent, and no vehicle call is made.
  */
@@ -32,24 +32,23 @@ class SurroundDetector(context: Context) {
     }
 
     /**
-     * Detects in one square view of a YUV_420_888 frame. (x0, y0) is the view's top-left in the frame, side its size.
-     * Returned boxes are 0..1 within that view.
+     * Detects in one flat sub-view of a YUV_420_888 frame. [lut] maps each 300x300 input pixel to a pixel of the
+     * fisheye view whose top row is [tileY0] in the frame (see FisheyeGeometry.lut). Boxes are in sub-view pixels.
      */
     fun detect(yb: ByteBuffer, ub: ByteBuffer, vb: ByteBuffer, yRow: Int, uvRow: Int, uvPix: Int,
-               x0: Int, y0: Int, side: Int, minScore: Float = 0.45f): List<Hit> {
+               lut: IntArray, tileY0: Int, minScore: Float = 0.45f): List<Hit> {
         input.rewind()
-        for (j in 0 until SIZE) {
-            val sy = y0 + j * side / SIZE
-            for (i in 0 until SIZE) {
-                val sx = x0 + i * side / SIZE
-                val y = yb.get(sy * yRow + sx).toInt() and 0xff
-                val uvi = (sy / 2) * uvRow + (sx / 2) * uvPix
-                val u = (ub.get(uvi).toInt() and 0xff) - 128
-                val v = (vb.get(uvi).toInt() and 0xff) - 128
-                input.put((y + 1.402f * v).toInt().coerceIn(0, 255).toByte())
-                input.put((y - 0.344f * u - 0.714f * v).toInt().coerceIn(0, 255).toByte())
-                input.put((y + 1.772f * u).toInt().coerceIn(0, 255).toByte())
-            }
+        for (k in 0 until SIZE * SIZE) {
+            val e = lut[k]
+            if (e < 0) { input.put(0); input.put(0); input.put(0); continue }
+            val sx = e and 0xffff; val sy = tileY0 + (e ushr 16)
+            val y = yb.get(sy * yRow + sx).toInt() and 0xff
+            val uvi = (sy / 2) * uvRow + (sx / 2) * uvPix
+            val u = (ub.get(uvi).toInt() and 0xff) - 128
+            val v = (vb.get(uvi).toInt() and 0xff) - 128
+            input.put((y + 1.402f * v).toInt().coerceIn(0, 255).toByte())
+            input.put((y - 0.344f * u - 0.714f * v).toInt().coerceIn(0, 255).toByte())
+            input.put((y + 1.772f * u).toInt().coerceIn(0, 255).toByte())
         }
         input.rewind()
         val outputs = HashMap<Int, Any>()
@@ -57,11 +56,11 @@ class SurroundDetector(context: Context) {
         interpreter.runForMultipleInputsOutputs(arrayOf<Any>(input), outputs)
         val out = ArrayList<Hit>()
         for (k in 0 until minOf(10, count[0].toInt())) {
-            val cls = classes[0][k].toInt()
-            val label = labels.getOrNull(cls + 1) ?: continue
+            val label = labels.getOrNull(classes[0][k].toInt() + 1) ?: continue
             if (label !in WANTED || scores[0][k] < minScore) continue
-            val b = boxes[0][k] // ymin, xmin, ymax, xmax
-            out += Hit(label, scores[0][k], b[1].coerceIn(0f, 1f), b[0].coerceIn(0f, 1f), b[3].coerceIn(0f, 1f), b[2].coerceIn(0f, 1f))
+            val b = boxes[0][k] // ymin, xmin, ymax, xmax (0..1)
+            out += Hit(label, scores[0][k], b[1].coerceIn(0f, 1f) * SIZE, b[0].coerceIn(0f, 1f) * SIZE,
+                b[3].coerceIn(0f, 1f) * SIZE, b[2].coerceIn(0f, 1f) * SIZE)
         }
         return out
     }

@@ -239,6 +239,8 @@ TensorFlow Lite makes no vehicle calls and the APK still has no network code (sm
 v0.8.5: the surround preview runs Google's COCO SSD MobileNet (`assets/detect.tflite`, provenance in
 `assets/MODEL_README.md`) on each of the four views and draws boxes for car, truck, bus, motorcycle, bicycle and
 person. Frames and results stay in memory and on screen; nothing is stored or sent. Still parked only.
+v0.8.6: each fisheye view is cut into three flat sub-views (pure geometry, `vision/FisheyeGeometry`) before detection,
+and detections are placed on an approximate top-down view of the car. Same rules: memory and screen only, parked.
 
 ## C. What the app writes
 
