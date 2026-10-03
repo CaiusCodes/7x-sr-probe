@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and signs the SR Probe debug APK WITHOUT Gradle or Google's SDK download host.
-# Used to produce dist/7x-sr-probe-v0.8.3-debug.apk in an environment where dl.google.com was blocked.
+# Used to produce dist/7x-sr-probe-v0.8.4-debug.apk in an environment where dl.google.com was blocked.
 # The normal route is Android Studio / Gradle (see docs/BUILD_AND_INSTALL.md); both build the same sources.
 #
 # Needs: JDK 17+, kotlinc 2.0.x, Debian/Ubuntu android-sdk-build-tools (aapt2, dx, zipalign, apksigner),
@@ -18,8 +18,11 @@ COMPILE_JAR=${COMPILE_JAR:?set COMPILE_JAR to an Android 12 framework jar}
 OUT=${OUT:-$ROOT/build-offline}
 KEYSTORE=${KEYSTORE:-$HOME/.android/debug.keystore}
 PKG=au.local.zeekr.srprobe
-VERSION_CODE=14
-VERSION_NAME=0.8.3
+VERSION_CODE=15
+VERSION_NAME=0.8.4
+
+# On-device detection runtime (third_party/tflite, Apache-2.0).
+TFLITE_JARS="$ROOT/third_party/tflite/tensorflow-lite-2.16.1.jar:$ROOT/third_party/tflite/tensorflow-lite-api-2.16.1.jar"
 
 rm -rf "$OUT"; mkdir -p "$OUT/classes" "$OUT/res" "$OUT/dex"
 
@@ -35,7 +38,7 @@ sed -e "s#<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"
 # 3. Kotlin -> JVM 1.8 bytecode without invokedynamic (dx cannot read indy lambdas / string concat).
 STDLIB=$(dirname "$(readlink -f "$(command -v "$KOTLINC")")")/../lib/kotlin-stdlib.jar
 "$KOTLINC" -jvm-target 1.8 -Xlambdas=class -Xsam-conversions=class -Xstring-concat=inline -no-reflect \
-    -classpath "$COMPILE_JAR" -d "$OUT/classes" $(find app/src/main/java -name '*.kt')
+    -classpath "$COMPILE_JAR:$TFLITE_JARS" -d "$OUT/classes" $(find app/src/main/java -name '*.kt')
 
 # 3b. dx cannot desugar invokedynamic, and Android has no LambdaMetafactory, so a surviving indy call site
 # crashes on the head unit (v0.1 shipped with kotlin.comparisons.compareBy(vararg), which is built on indy
@@ -46,11 +49,15 @@ fi
 
 # 4. Dex (app classes + Kotlin stdlib minus multi-release entries).
 mkdir -p "$OUT/stdlib"; (cd "$OUT/stdlib" && unzip -q -o "$STDLIB" -x 'META-INF/*')
-"$BUILD_TOOLS/dx" --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" "$OUT/classes" "$OUT/stdlib"
+mkdir -p "$OUT/tflite"; for j in ${TFLITE_JARS//:/ }; do (cd "$OUT/tflite" && unzip -q -o "$j" -x 'META-INF/*'); done
+"$BUILD_TOOLS/dx" --dex --min-sdk-version=26 --output="$OUT/dex/classes.dex" "$OUT/classes" "$OUT/stdlib" "$OUT/tflite"
 
 # 5. Package, align, sign (debug key).
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
 (cd "$OUT/dex" && zip -q -j "$OUT/unsigned.apk" classes.dex)
+mkdir -p "$OUT/native/lib/arm64-v8a" && cp third_party/tflite/jni/arm64-v8a/*.so "$OUT/native/lib/arm64-v8a/"
+(cd "$OUT/native" && zip -q -0 -r "$OUT/unsigned.apk" lib)
+if [ -d app/src/main/assets ]; then (cd app/src/main && zip -q -0 -r "$OUT/unsigned.apk" assets); fi
 "$BUILD_TOOLS/zipalign" -f -p 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
 if [ ! -f "$KEYSTORE" ]; then
   mkdir -p "$(dirname "$KEYSTORE")"

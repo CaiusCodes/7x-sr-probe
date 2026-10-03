@@ -16,7 +16,8 @@ import java.io.File
 object CameraList {
 
     data class Cam(val id: String, val lines: List<String>)
-    data class Result(val hasCameraPermission: Boolean, val cameras: List<Cam>, val devVideo: List<String>, val error: String?)
+    data class Result(val hasCameraPermission: Boolean, val cameras: List<Cam>, val devVideo: List<String>, val error: String?,
+                      val detector: String = au.local.zeekr.srprobe.vision.DetectorRuntime.check())
 
     fun run(context: Context): Result {
         val perm = context.checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED

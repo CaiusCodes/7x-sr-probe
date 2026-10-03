@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.8.3 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.8.4 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -327,6 +327,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         appendLine("CAMERAS (list only, v0.8)")
         val r = vm.cameras ?: run { appendLine("  (not run)"); return@buildString }
         appendLine("CAMERA permission granted: ${r.hasCameraPermission}")
+        appendLine("Detector runtime: ${r.detector}")
         appendLine("/dev video nodes: ${r.devVideo.joinToString().ifEmpty { "none visible" }}")
         r.error?.let { appendLine("error: $it") }
         if (r.cameras.isEmpty() && r.error == null) appendLine("no camera ids visible")
@@ -362,7 +363,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.8.3 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.8.4 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -446,7 +447,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.8.3")
+        put("app", "7X SR Probe 0.8.4")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {

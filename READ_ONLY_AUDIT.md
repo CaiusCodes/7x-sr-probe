@@ -229,6 +229,13 @@ to a half-resolution 2x2 grid bitmap and shown on screen (max ~8/s). Rules:
   camera service); no automatic retry when the car takes the camera back; at least 3 s between close and reopen, because
   rapid open/close around sleep can leave a stuck camera-service record that only a head-unit restart clears.
 
+## I. On-device detection runtime (v0.8.4, owner approved bundling 2026-10-03)
+
+TensorFlow Lite 2.16.1 (Apache-2.0) is bundled unmodified from Maven Central (checksums in
+`third_party/tflite/README.md`). v0.8.4 only loads it and reports its version (`vision/DetectorRuntime`).
+A later version will run a car/person/truck detector on surround frames in memory; results are drawn on screen only.
+TensorFlow Lite makes no vehicle calls and the APK still has no network code (smoke-tested).
+
 ## C. What the app writes
 
 ## C. What the app writes (all local, none to the vehicle)
