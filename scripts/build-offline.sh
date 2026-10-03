@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and signs the SR Probe debug APK WITHOUT Gradle or Google's SDK download host.
-# Used to produce dist/7x-sr-probe-v0.7-debug.apk in an environment where dl.google.com was blocked.
+# Used to produce dist/7x-sr-probe-v0.8-debug.apk in an environment where dl.google.com was blocked.
 # The normal route is Android Studio / Gradle (see docs/BUILD_AND_INSTALL.md); both build the same sources.
 #
 # Needs: JDK 17+, kotlinc 2.0.x, Debian/Ubuntu android-sdk-build-tools (aapt2, dx, zipalign, apksigner),
@@ -18,8 +18,8 @@ COMPILE_JAR=${COMPILE_JAR:?set COMPILE_JAR to an Android 12 framework jar}
 OUT=${OUT:-$ROOT/build-offline}
 KEYSTORE=${KEYSTORE:-$HOME/.android/debug.keystore}
 PKG=au.local.zeekr.srprobe
-VERSION_CODE=10
-VERSION_NAME=0.7
+VERSION_CODE=11
+VERSION_NAME=0.8
 
 rm -rf "$OUT"; mkdir -p "$OUT/classes" "$OUT/res" "$OUT/dex"
 

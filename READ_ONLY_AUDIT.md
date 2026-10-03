@@ -202,6 +202,21 @@ The observer is a `java.lang.reflect.Proxy` implementing `ISRObjectsObserver`. A
 
 The v0.5 build also reports the exact exception when the ADCU SDK jar fails to load (no new calls).
 
+## H. Camera list (v0.8, opt-in, owner asked 2026-10-03)
+
+The owner asked to pursue camera access (other App Lab apps record dashcam video; a public note reports one
+Camera2 composite surround stream on a 7X). This step only **describes** cameras:
+
+| Call | Why it is read-only |
+|---|---|
+| `CameraManager.getCameraIdList()` | Returns id strings. Does not open or power a camera. |
+| `CameraManager.getCameraCharacteristics(id)` | Returns static metadata (facing, sizes, formats). Does not open a camera. |
+| `Context.checkSelfPermission(CAMERA)` | Reports whether the permission is held; nothing is requested. |
+| `File("/dev").list()` filtered to `video*` | Directory names only; no device node is opened. |
+
+Never used: `openCamera`, `CameraDevice`, capture sessions, `ImageReader`, EVS, permission requests. The app
+does not declare the CAMERA permission. Opening a stream would be a later, separately audited phase.
+
 ## C. What the app writes
 
 ## C. What the app writes (all local, none to the vehicle)

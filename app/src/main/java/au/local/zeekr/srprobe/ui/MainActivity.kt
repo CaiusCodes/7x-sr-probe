@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.7", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.8", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -80,6 +80,10 @@ class MainActivity : Activity() {
         right.addView(button("Read SDK-named ADAS ids once (parked)") { optInNamed(false) })
         right.addView(button("Subscribe to SR-object feed (parked)") { optInSrFeed(false) })
         right.addView(button("Query vehicle data provider (parked)") { optInProvider() })
+        right.addView(button("List cameras (no images, parked)") {
+            confirm("List cameras?", "Asks Android which cameras this app can see and their sizes. No camera is opened " +
+                "and no picture or video is taken.") { toast("Listing…"); vm.listCameras { showText(exporter.cameraText()) } }
+        })
         right.addView(text("Log", 18f, FG, bold = true).apply { setPadding(0, dp(16), 0, 0) })
         logView = text("", 13f, DIM).apply { typeface = Typeface.MONOSPACE }
         right.addView(logView)

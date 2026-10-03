@@ -56,6 +56,7 @@ class DiagnosticsViewModel(private val app: Context) {
     @Volatile var srInspect: List<au.local.zeekr.srprobe.platform.DexInspector.Result> = emptyList(); private set
     @Volatile var srFeed: SrFeed? = null; private set
     @Volatile var providerPaths: List<au.local.zeekr.srprobe.platform.ProviderPaths.Found> = emptyList(); private set
+    @Volatile var cameras: au.local.zeekr.srprobe.platform.CameraList.Result? = null; private set
     @Volatile var providerResults: List<au.local.zeekr.srprobe.platform.ProviderProbe.UriResult> = emptyList(); private set
     val errors = java.util.Collections.synchronizedList(ArrayList<String>())
 
@@ -236,6 +237,16 @@ class DiagnosticsViewModel(private val app: Context) {
             busy = null; changed()
         }
         return null
+    }
+
+    /** v0.8 opt-in: list cameras by characteristics only (never opened). */
+    fun listCameras(done: () -> Unit) = worker.execute {
+        step("Opt-in: list cameras (no images)") {
+            cameras = au.local.zeekr.srprobe.platform.CameraList.run(app)
+            recorder.log("Cameras: ${cameras?.cameras?.size ?: 0} ids, error=${cameras?.error}")
+        }
+        busy = null; changed()
+        main.post(done)
     }
 
     /** v0.5 opt-in: read-only query of com.zeekr.vehicle.data. Parked only. */

@@ -83,7 +83,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val sv = vm.services
         appendLine("# 7X SR Probe Report")
         appendLine()
-        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.7 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
+        appendLine("Generated ${vm.recorder.now()} by 7X SR Probe v0.8 (READ ONLY). Safe discovery started ${vm.discoveryRunAt ?: "never"}, took ${vm.discoveryMs / 1000} s.")
         appendLine("Gear read P at discovery: ${vm.parkedAtDiscovery ?: "unknown"}.")
         appendLine()
 
@@ -323,6 +323,16 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         }
     }
 
+    fun cameraText(): String = buildString {
+        appendLine("CAMERAS (list only, never opened, v0.8)")
+        val r = vm.cameras ?: run { appendLine("  (not run)"); return@buildString }
+        appendLine("CAMERA permission granted: ${r.hasCameraPermission}")
+        appendLine("/dev video nodes: ${r.devVideo.joinToString().ifEmpty { "none visible" }}")
+        r.error?.let { appendLine("error: $it") }
+        if (r.cameras.isEmpty() && r.error == null) appendLine("no camera ids visible")
+        r.cameras.forEach { c -> appendLine("== camera ${c.id}"); c.lines.forEach { appendLine("  $it") } }
+    }
+
     fun providerText(): String = buildString {
         appendLine("PROVIDERS IN ZEEKRVEHICLESERVICE (names only) + read-only query, v0.7")
         vm.providerPaths.forEach { f ->
@@ -352,7 +362,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         val st = vm.ecarx.status
         val pk = vm.packages
         val sv = vm.services
-        appendLine("7X SR PROBE 0.7 SUMMARY   ${vm.recorder.now()}   (page 1)")
+        appendLine("7X SR PROBE 0.8 SUMMARY   ${vm.recorder.now()}   (page 1)")
         val android = vm.environment.firstOrNull { it.title.startsWith("Android") }?.rows?.toMap() ?: emptyMap()
         val props = vm.environment.firstOrNull { it.title.startsWith("Platform") }?.rows?.toMap() ?: emptyMap()
         appendLine("Android ${android["Android release"]} SDK ${android["SDK level"]}; real build ${props["ro.build.display.id"]}")
@@ -422,6 +432,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
         appendLine()
         appendLine("Signals: " + vm.signals.filter { it.availability == Availability.AVAILABLE }.joinToString { "${it.label}=${it.decodedValue ?: it.rawValue}" })
         if (vm.providerResults.isNotEmpty()) { appendLine(); append(providerText()) }
+        if (vm.cameras != null) { appendLine(); append(cameraText()) }
         vm.srFeed?.let { f ->
             appendLine()
             appendLine("SR FEED SUBSCRIBE (v0.4): updates=${f.updates.get()}")
@@ -435,7 +446,7 @@ class ReportExporter(private val ctx: Context, private val vm: DiagnosticsViewMo
     // ------------------------------------------------------------------ JSON
 
     fun discoveryJson(): JSONObject = JSONObject().apply {
-        put("app", "7X SR Probe 0.7")
+        put("app", "7X SR Probe 0.8")
         put("generated", vm.recorder.now())
         put("ledger", JSONObject(ReadOnlyGuard.ledgerSnapshot() as Map<*, *>))
         put("environment", JSONArray().apply {
