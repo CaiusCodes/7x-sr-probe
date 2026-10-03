@@ -221,6 +221,9 @@ does not declare the CAMERA permission. Opening a stream would be a later, separ
 
 ## C. What the app writes (all local, none to the vehicle)
 
+- v0.8.1: "Show Report As QR Codes" draws the summary text as QR codes on screen (pure computation in
+  `report/QrEncoder`, no network). The owner scans them with a phone. Nothing is sent from the car.
+
 - `files/srprobe/srprobe-events.jsonl` (capture), `files/srprobe/export/*` (report files) in the app's private storage.
 - On **Export**: copies to `Download/SRProbe/` through MediaStore (Android 10+).
 - On **Save To Folder / USB…**: copies to the folder you pick in the system picker.

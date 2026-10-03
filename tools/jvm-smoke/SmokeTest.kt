@@ -73,6 +73,8 @@ fun main(args: Array<String>) {
     check(!ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.someip.a"), "SOME/IP admit: refused authority stays blocked")
     check(ReadOnlyGuard.admitFromManifest(SOMIP, "provider name=.someip.SomIpProvider exported=true authorities=com.zeekr.vehicle.someip") == "com.zeekr.vehicle.someip", "SOME/IP admit: exported, no permission admitted")
     check(ReadOnlyGuard.isProviderAllowed("content", "com.zeekr.vehicle.someip"), "SOME/IP admit: admitted authority allowed")
+    check(au.local.zeekr.srprobe.report.QrEncoder.encode("hello".toByteArray()).size == 21, "QR: short text is a version 1 code")
+    check(au.local.zeekr.srprobe.report.QrEncoder.chunks("a".repeat(1200), 500).let { it.size == 3 && it[0].startsWith("SRP 1/3\n") }, "QR: report split into numbered parts")
     check(T.perceptionScore("com.zeekr.adas.ObstacleInfo") >= 2, "perception score: ObstacleInfo listed")
     check(T.perceptionScore("com.example.player.TrackInfo") == 0, "perception score: media TrackInfo ignored")
     check(T.perceptionScore("org.json.JSONObject") == 0, "perception score: JSONObject ignored")

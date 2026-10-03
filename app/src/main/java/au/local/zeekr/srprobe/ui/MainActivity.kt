@@ -48,7 +48,7 @@ class MainActivity : Activity() {
         }
 
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text("7X SR Probe  v0.8", 30f, FG, bold = true))
+        left.addView(text("7X SR Probe  v0.8.1", 30f, FG, bold = true))
         left.addView(TextView(this).apply {
             text = "SAFETY MODE   READ ONLY  ✓"
             textSize = 22f; setTextColor(Color.BLACK); typeface = Typeface.DEFAULT_BOLD
@@ -71,6 +71,7 @@ class MainActivity : Activity() {
         right.addView(button("Save Report To Folder / USB…") { pickFolder() })
         right.addView(button("Share Report…") { share() })
         right.addView(button("Show Summary (to photograph)") { showSummary() })
+        right.addView(button("Show Report As QR Codes (scan with phone)") { showQr(0) })
         right.addView(button("Copy Report To Clipboard (in parts)") { copyNextPart() })
         right.addView(text("Optional (off by default, see READ_ONLY_AUDIT.md)", 16f, DIM).apply { setPadding(0, dp(16), 0, dp(4)) })
         binderToggle = button("") {
@@ -143,6 +144,42 @@ class MainActivity : Activity() {
             }
             else -> toast(r)
         }
+    }
+
+    /** v0.8.1: the summary as QR codes, one per page, so a phone camera can read it as exact text. */
+    private var qrParts: List<String> = emptyList()
+
+    private fun showQr(index: Int) {
+        if (index == 0 || qrParts.isEmpty()) qrParts = au.local.zeekr.srprobe.report.QrEncoder.chunks(exporter.summary(), 500)
+        val i = index.coerceIn(0, qrParts.size - 1)
+        val m = au.local.zeekr.srprobe.report.QrEncoder.encode(qrParts[i].toByteArray(Charsets.UTF_8))
+        val quiet = 4
+        val n = m.size + quiet * 2
+        val px = IntArray(n * n) { k ->
+            val y = k / n - quiet; val x = k % n - quiet
+            if (y in m.indices && x in m.indices && m[y][x]) Color.BLACK else Color.WHITE
+        }
+        val bmp = android.graphics.Bitmap.createBitmap(px, n, n, android.graphics.Bitmap.Config.ARGB_8888)
+        val side = (minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels) * 0.8f).toInt()
+        val img = android.widget.ImageView(this).apply {
+            setImageDrawable(android.graphics.drawable.BitmapDrawable(resources, bmp).apply { setFilterBitmap(false) })
+            layoutParams = LinearLayout.LayoutParams(side, side)
+            setBackgroundColor(Color.WHITE)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setBackgroundColor(Color.WHITE)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(TextView(this@MainActivity).apply {
+                text = "Code ${i + 1} of ${qrParts.size}: scan with your phone camera, copy the text, paste it in the chat"
+                textSize = 18f; setTextColor(Color.BLACK)
+            })
+            addView(img)
+        }
+        val b = AlertDialog.Builder(this, android.R.style.Theme_Material_Light_NoActionBar_Fullscreen).setView(box)
+            .setNegativeButton("Close", null)
+        if (i > 0) b.setNeutralButton("Previous") { _, _ -> showQr(i - 1).let { } }
+        if (i < qrParts.size - 1) b.setPositiveButton("Next") { _, _ -> showQr(i + 1).let { } }
+        b.show()
     }
 
     /** v0.5: read-only query of the exported vehicle data provider. */
