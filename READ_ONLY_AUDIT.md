@@ -250,7 +250,7 @@ and detections are placed on an approximate top-down view of the car. Same rules
 - Network: `WebSettings.blockNetworkLoads = true`; the APK still has no `INTERNET` permission; any navigation outside `file:///android_asset/vision/` is refused. The build script fails if the page contains any `https://` address outside the bundled three.js.
 - Third-party code: three.js r128 (MIT), vendored in `third_party/threejs/` with its npm checksum, inlined into the page. No CDN.
 - No JavaScript bridge (`addJavascriptInterface` is never called), so the page cannot reach app or vehicle code. `allowContentAccess = false`.
-- The page keeps the theme, view and mute choice in WebView local storage, inside the app only. The chime is synthesised by WebAudio; no audio files.
+- The page keeps the theme, view and mute choice in WebView local storage, inside the app only. The chime is a short WAV synthesised in memory by the page (played through a media element, WebAudio as fallback); no audio files, nothing fetched.
 - Parked use only, like the rest of the app. Using it while driving needs the owner's explicit approval (proposal stage 7).
 
 ## C. What the app writes

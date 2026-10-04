@@ -54,7 +54,7 @@ class VisionActivity : Activity() {
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         val root = FrameLayout(this)
         root.addView(w, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        val close = Button(this).apply { text = "Close"; isAllCaps = false; textSize = 16f; alpha = 0.85f; setOnClickListener { finish() } }
+        val close = Button(this).apply { text = "Exit"; isAllCaps = false; textSize = 16f; alpha = 0.85f; setOnClickListener { finish() } }
         root.addView(close, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM or Gravity.START).apply { setMargins(24, 24, 24, 24) })
         setContentView(root)
