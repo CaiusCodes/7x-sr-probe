@@ -818,7 +818,7 @@ function placeCamera(speed, dt, snap) {
   camera.fov = viewMode === 'wide' ? (portrait ? 66 : 58) : (portrait ? 62 : 52);
   let up, back, ahead;
   if (viewMode === 'wide') { up = 20 + camK * 4 + (portrait ? 10 : 0); back = 12 + camK * 4 + (portrait ? 4 : 0); ahead = 1 + camK * 4; }
-  else { up = 5.0 + camK * 1.4 + (portrait ? 3.5 : 0); back = 11.5 + camK * 4 + (portrait ? 5 : 0); ahead = 13 + camK * 10 + (portrait ? 2 : 0); }
+  else { up = 5.6 + camK * 1.4 + (portrait ? 3.5 : 0); back = 13.5 + camK * 4 + (portrait ? 5 : 0); ahead = 13 + camK * 10 + (portrait ? 2 : 0); }
   const tp = new THREE.Vector3(0, up, -EGO_CX + back), tl = new THREE.Vector3(0, 0, -EGO_CX - ahead);
   const f = snap ? 1 : 1 - Math.exp(-dt / 0.35);
   camPos.lerp(tp, f); camLook.lerp(tl, f);
